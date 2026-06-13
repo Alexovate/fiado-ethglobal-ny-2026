@@ -11,7 +11,7 @@ export const config = {
   world: {
     appId: env("WORLD_APP_ID"),
     actionId: env("WORLD_ACTION_ID", "fiado-credit-line"),
-    apiBase: env("WORLD_API_BASE", "https://developer.world.org"),
+    apiBase: env("WORLD_API_BASE", "https://developer.worldcoin.org"),
     rpId: env("WORLD_VERIFY_RP_ID"),
   },
 

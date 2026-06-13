@@ -1,9 +1,11 @@
 import { config } from "./config.js";
 
-// World ID proof verification. In a live demo we POST the proof to the World
-// verify API; in rehearsal (DEMO_MOCK_MODE or no app id) we accept the proof so
-// the flow runs without network/World App dependencies. The honest "what is real
-// vs mocked" note in the README reflects whichever mode the demo runs in.
+// World ID proof verification for an EXTERNAL app (IDKit on the web, QR/deeplink
+// to World App). We verify the proof server-side via the World cloud-verify
+// endpoint — POST /api/v2/verify/{app_id} — which is exactly what IDKit's and
+// MiniKit's `verifyCloudProof` call internally (the proven pattern). In rehearsal
+// (DEMO_MOCK_MODE or no app id) we accept the proof so the flow runs on a PC
+// without World App. README "what is real vs mocked" reflects the active mode.
 
 export interface WorldProof {
   nullifier_hash: string;
@@ -19,22 +21,12 @@ export interface VerifyResult {
   detail?: string;
 }
 
-export async function verifyProof(
-  proof: WorldProof,
-  signal?: string,
-): Promise<VerifyResult> {
+export async function verifyProof(proof: WorldProof, signal?: string): Promise<VerifyResult> {
   if (config.demoMockMode || !config.world.appId) {
     return { ok: true, nullifierHash: proof.nullifier_hash, mode: "mock" };
   }
 
-  // World ID 4.0 verify endpoint. NOTE: the v4 body is the IDKit-4.0 proof shape
-  // ({ protocol_version, nonce, action, responses: [...] }), not the legacy
-  // nullifier_hash/merkle_root/proof fields below. Wiring IDKit 4.0 to produce
-  // that payload is the remaining World integration; until then DEMO_MOCK_MODE
-  // is the reliable demo path (see README "what is real vs mocked").
-  const rpId = config.world.rpId || config.world.appId;
-  const url = `${config.world.apiBase}/api/v4/verify/${rpId}`;
-
+  const url = `${config.world.apiBase}/api/v2/verify/${config.world.appId}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -44,7 +36,7 @@ export async function verifyProof(
       proof: proof.proof,
       verification_level: proof.verification_level ?? "orb",
       action: config.world.actionId,
-      signal: signal ?? "",
+      signal_hash: signal,
     }),
   });
 
@@ -52,6 +44,5 @@ export async function verifyProof(
     const detail = await res.text().catch(() => "");
     return { ok: false, nullifierHash: proof.nullifier_hash, mode: "live", detail };
   }
-
   return { ok: true, nullifierHash: proof.nullifier_hash, mode: "live" };
 }
