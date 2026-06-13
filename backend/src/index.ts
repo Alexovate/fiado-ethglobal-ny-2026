@@ -6,6 +6,7 @@ import { signOpenLine, backendSignerAddress } from "./signing.js";
 import * as arc from "./arc.js";
 import * as requests from "./requests.js";
 import { mandateDigest, escalationDigest } from "./digests.js";
+import { signRequest } from "@worldcoin/idkit-server";
 import type { Address, Hex } from "viem";
 import {
   markVerified,
@@ -30,6 +31,25 @@ const mandateExpiresAt = startedAt + config.mandate.ttlHours * 3600 * 1000;
 
 app.get("/health", (_req, res) => {
   json(res, { ok: true, demoMockMode: config.demoMockMode, startedAt });
+});
+
+// 0) RP signature for World ID 4.0 IDKit requests (signed with the RP signer key).
+app.post("/rp-signature", (req: Request, res: Response) => {
+  if (!config.world.signerPrivateKey) return json(res, { error: "WORLD_SIGNER_PRIVATE_KEY not set" }, 500);
+  const action = (req.body?.action as string) || config.world.actionId;
+  try {
+    const r = signRequest({ signingKeyHex: config.world.signerPrivateKey, action });
+    json(res, {
+      rp_id: config.world.rpId,
+      nonce: r.nonce,
+      created_at: r.createdAt,
+      expires_at: r.expiresAt,
+      sig: r.sig,
+      signature: r.sig,
+    });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
 });
 
 // 1) World ID proof -> verified human, one line per human enforced downstream.

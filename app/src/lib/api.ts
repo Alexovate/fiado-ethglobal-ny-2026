@@ -41,6 +41,13 @@ export const api = {
       proof: { nullifier_hash: nullifierHash, merkle_root: "0x0", proof: "0x0" },
     }),
 
+  // RP signature (signed by the backend with the RP signer key) for an IDKit 4.0 request.
+  rpSignature: (action: string) =>
+    post<{ rp_id: string; nonce: string; created_at: number; expires_at: number; signature: string }>(
+      "/rp-signature",
+      { action },
+    ),
+
   // Real IDKit 4.0 result -> backend forwards it as-is to /api/v4/verify/{rp_id}.
   verifyProof: (proof: unknown) =>
     post<{ ok: boolean; nullifierHash: string; mode: string; hasActiveLine: boolean }>("/verify", {

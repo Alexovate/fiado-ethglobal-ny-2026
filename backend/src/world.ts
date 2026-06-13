@@ -34,11 +34,14 @@ export async function verifyProof(proof: WorldProof, _signal?: string): Promise<
   }
 
   // v4 cloud verify lives on developer.world.org and keys off the rp_id.
+  // Forward the IDKit result, but ensure `action` is present — v4 requires it for
+  // uniqueness proofs and IDKit doesn't echo it back into the result payload.
   const url = `https://developer.world.org/api/v4/verify/${config.world.rpId}`;
+  const body = { action: config.world.actionId, ...proof };
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(proof), // forward as-is
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

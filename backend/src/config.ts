@@ -13,6 +13,7 @@ export const config = {
     actionId: env("WORLD_ACTION_ID", "fiado-credit-line"),
     apiBase: env("WORLD_API_BASE", "https://developer.worldcoin.org"),
     rpId: env("WORLD_VERIFY_RP_ID"),
+    signerPrivateKey: env("WORLD_SIGNER_PRIVATE_KEY"),
   },
 
   // Signing — backend authorizes openLine; the ledger key is on the device.

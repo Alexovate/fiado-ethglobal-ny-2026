@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { IDKitWidget, VerificationLevel, type ISuccessResult } from "@worldcoin/idkit";
+import { IDKitRequestWidget, orbLegacy, type IDKitResult, type RpContext } from "@worldcoin/idkit";
 import { api, requests, EXPLORER, type CreditRequest } from "./lib/api";
 import { CHAIN } from "./lib/scenarios";
 import { usdc, pct } from "./lib/format";
@@ -21,6 +21,8 @@ export default function CustomerView() {
   const [err, setErr] = useState<string | null>(null);
   const [answerText, setAnswerText] = useState("");
   const [tx, setTx] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [rpContext, setRpContext] = useState<RpContext | null>(null);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPoll = () => {
@@ -39,20 +41,33 @@ export default function CustomerView() {
     [amount, purpose],
   );
 
-  // Real World ID 4.0 proof (IDKit) -> backend forwards as-is to v4 verify ->
+  // Fetch a fresh RP signature from the backend, then open the IDKit widget.
+  const startVerify = useCallback(async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const sig = await api.rpSignature(ACTION);
+      setRpContext({
+        rp_id: sig.rp_id,
+        nonce: sig.nonce,
+        created_at: sig.created_at,
+        expires_at: sig.expires_at,
+        signature: sig.signature,
+      } as RpContext);
+      setOpen(true);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  // IDKit returns a 4.0 result -> backend forwards it as-is to v4 verify ->
   // start the request with the nullifier the backend extracted from the proof.
-  const onVerified = useCallback(
-    async (p: ISuccessResult) => {
-      setErr(null);
-      setBusy(true);
-      try {
-        const { nullifierHash } = await api.verifyProof(p);
-        await startRequest(nullifierHash);
-      } catch (e) {
-        setErr((e as Error).message);
-      } finally {
-        setBusy(false);
-      }
+  const handleVerify = useCallback(
+    async (result: IDKitResult) => {
+      const { nullifierHash } = await api.verifyProof(result);
+      await startRequest(nullifierHash);
     },
     [startRequest],
   );
@@ -159,22 +174,27 @@ export default function CustomerView() {
             className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm outline-none focus:border-teal"
           />
 
-          <IDKitWidget
-            app_id={APP_ID}
-            action={ACTION}
-            verification_level={VerificationLevel.Device}
-            onSuccess={onVerified}
+          <button
+            onClick={startVerify}
+            disabled={busy}
+            className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
           >
-            {({ open }) => (
-              <button
-                onClick={open}
-                disabled={busy}
-                className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
-              >
-                {busy ? "Verifying…" : "Verify with World ID & request"}
-              </button>
-            )}
-          </IDKitWidget>
+            {busy ? "Verifying…" : "Verify with World ID & request"}
+          </button>
+          {rpContext && (
+            <IDKitRequestWidget
+              open={open}
+              onOpenChange={setOpen}
+              app_id={APP_ID}
+              action={ACTION}
+              rp_context={rpContext}
+              allow_legacy_proofs={true}
+              preset={orbLegacy({})}
+              handleVerify={handleVerify}
+              onSuccess={() => setOpen(false)}
+              onError={(e: unknown) => setErr(`verification error: ${JSON.stringify(e)}`)}
+            />
+          )}
           <button onClick={demoSkip} disabled={busy} className="text-center text-[11px] text-faint hover:text-muted">
             Demo (skip World ID scan)
           </button>
