@@ -41,7 +41,7 @@ export const AUTO: Scenario = {
     { label: "Confidence 0.95", status: "ok", detail: "≥ 0.85 threshold" },
     { label: "Inside mandate", status: "ok", detail: "≤ 250/tx · total ok" },
   ],
-  borrower: {
+  customer: {
     nullifierShort: "0x4e2a…c1a",
     verifiedLevel: "Orb",
     memberSince: "Mar 2026",
@@ -68,19 +68,19 @@ export const ESCALATE: Scenario = {
     { label: "Requested 1,500.00 USDC", status: "warn", detail: "unusually large" },
     { label: "Per-transaction cap 250 USDC", status: "fail", detail: "6× over your limit" },
     { label: "Confidence 0.71", status: "warn", detail: "below 0.85 threshold" },
-    { label: "Largest tab ever for this borrower", status: "warn", detail: "prior max 45 USDC" },
+    { label: "Largest tab ever for this customer", status: "warn", detail: "prior max 45 USDC" },
   ],
   escalationReasons: [
     { code: "OVER_TX_CAP", plain: "1,500 USDC is 6× the 250 USDC per-transaction cap you set." },
     { code: "LOW_CONFIDENCE", plain: "Confidence 0.71 is below your 0.85 auto-approve threshold." },
     {
       code: "VELOCITY_ANOMALY",
-      plain: "This is the largest amount this borrower has ever requested (prior max 45 USDC).",
+      plain: "This is the largest amount this customer has ever requested (prior max 45 USDC).",
     },
   ],
   agentRecommendation:
-    "My read: approve. The borrower has repaid 8 of 8 prior tabs (142 USDC, 0% default) and Doña Rosa is a trusted, registered merchant. The only concern is size — it falls outside the frame you set, so this one is yours to sign.",
-  borrower: {
+    "My read: approve. The customer has repaid 8 of 8 prior tabs (142 USDC, 0% default) and Doña Rosa is a trusted, registered merchant. The only concern is size — it falls outside the frame you set, so this one is yours to sign.",
+  customer: {
     nullifierShort: "0x9f2c…ab1",
     verifiedLevel: "Orb",
     memberSince: "Apr 2026",

@@ -6,7 +6,7 @@ import { usdc, pct } from "./lib/format";
 
 // Live operator dashboard. Polls the backend for incoming credit requests and
 // shows the agent's decisions in real time. Escalated requests are actionable:
-// the human can ask the borrower a question, decline, or approve on the Ledger.
+// the human can ask the customer a question, decline, or approve on the Ledger.
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   auto_approved: { label: "approved", cls: "border-teal/40 bg-teal-dim text-teal" },
@@ -24,7 +24,7 @@ export default function OperatorDashboard() {
   const [note, setNote] = useState<string | null>(null);
   const [asking, setAsking] = useState<Record<string, string>>({});
   const [reviewId, setReviewId] = useState<string | null>(null);
-  const [borrower, setBorrower] = useState<{ reputationTier: string; outstandingDisplay: string } | null>(null);
+  const [customer, setCustomer] = useState<{ reputationTier: string; outstandingDisplay: string } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -87,8 +87,8 @@ export default function OperatorDashboard() {
         const session = await connectLedger();
         const sig = await signInner(session, prep.digest);
         await session.close();
-        await api.escalateSubmit(line.lineId, r.merchant, prep.onChainAmount, prep.nonce, sig);
-        await reqApi.decide(r.id, "approve");
+        const { hash } = await api.escalateSubmit(line.lineId, r.merchant, prep.onChainAmount, prep.nonce, sig);
+        await reqApi.disbursed(r.id, line.lineId, hash);
         setNote("Approved on Ledger, settled on Arc.");
         setReviewId(null);
         await refresh();
@@ -120,10 +120,10 @@ export default function OperatorDashboard() {
 
   const openReview = useCallback(async (r: CreditRequest) => {
     setReviewId(r.id);
-    setBorrower(null);
+    setCustomer(null);
     try {
       const s = await api.customerStatus(r.nullifierHash);
-      setBorrower({ reputationTier: s.reputationTier, outstandingDisplay: s.outstandingDisplay });
+      setCustomer({ reputationTier: s.reputationTier, outstandingDisplay: s.outstandingDisplay });
     } catch {
       /* ignore */
     }
@@ -203,7 +203,7 @@ export default function OperatorDashboard() {
 
               {openQ && (
                 <div className="mt-2 text-xs text-tertiary">
-                  Q: {openQ.text} {openQ.answer ? `→ ${openQ.answer}` : "(awaiting borrower)"}
+                  Q: {openQ.text} {openQ.answer ? `→ ${openQ.answer}` : "(awaiting customer)"}
                 </div>
               )}
               {r.questions
@@ -226,7 +226,7 @@ export default function OperatorDashboard() {
                 </a>
               )}
 
-              {/* mark a granted loan repaid -> frees the borrower's credit */}
+              {/* mark a granted tab repaid -> frees the customer's credit */}
               {granted(r.status) && (
                 <div className="mt-3 border-t border-border/60 pt-3">
                   <button
@@ -258,7 +258,7 @@ export default function OperatorDashboard() {
       {review && (
         <ReviewModal
           r={review}
-          borrower={borrower}
+          customer={customer}
           busy={busyId === review.id}
           askText={asking[review.id] ?? ""}
           onAskText={(v) => setAsking((a) => ({ ...a, [review.id]: v }))}
@@ -274,7 +274,7 @@ export default function OperatorDashboard() {
 
 function ReviewModal({
   r,
-  borrower,
+  customer,
   busy,
   askText,
   onAskText,
@@ -284,7 +284,7 @@ function ReviewModal({
   onClose,
 }: {
   r: CreditRequest;
-  borrower: { reputationTier: string; outstandingDisplay: string } | null;
+  customer: { reputationTier: string; outstandingDisplay: string } | null;
   busy: boolean;
   askText: string;
   onAskText: (v: string) => void;
@@ -344,12 +344,12 @@ function ReviewModal({
 
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-lg border border-border bg-surface px-3 py-2">
-              <div className="text-[10px] uppercase tracking-wider text-faint">Borrower</div>
-              <div className="text-sm font-semibold text-teal">{borrower?.reputationTier ?? "…"}</div>
+              <div className="text-[10px] uppercase tracking-wider text-faint">Customer</div>
+              <div className="text-sm font-semibold text-teal">{customer?.reputationTier ?? "…"}</div>
             </div>
             <div className="rounded-lg border border-border bg-surface px-3 py-2">
               <div className="text-[10px] uppercase tracking-wider text-faint">Currently owed</div>
-              <div className="text-sm font-semibold">{borrower ? usdc(Number(borrower.outstandingDisplay)) : "…"}</div>
+              <div className="text-sm font-semibold">{customer ? usdc(Number(customer.outstandingDisplay)) : "…"}</div>
             </div>
           </div>
 
@@ -362,19 +362,19 @@ function ReviewModal({
                   {q.answer ? (
                     <div className="ml-3 text-ink/90">↳ {q.answer}</div>
                   ) : (
-                    <div className="ml-3 text-faint italic">awaiting borrower…</div>
+                    <div className="ml-3 text-faint italic">awaiting customer…</div>
                   )}
                 </div>
               ))}
             </div>
           )}
 
-          {/* ask the borrower another question */}
+          {/* ask the customer another question */}
           <div className="flex gap-2">
             <input
               value={askText}
               onChange={(e) => onAskText(e.target.value)}
-              placeholder="Ask the borrower a question…"
+              placeholder="Ask the customer a question…"
               className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs outline-none focus:border-teal"
             />
             <button

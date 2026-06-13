@@ -345,12 +345,12 @@ export default function CustomerView() {
           title="Approved"
           body={`${usdc(req.amountDisplay)} store credit at Doña Rosa. The merchant is paid directly — you pay it back later.`}
           confidence={req.confidence}
-          tx={tx}
+          tx={tx ?? req.tx}
           reasoning={req.decidedBy === "agent" ? req.agentReasoning : undefined}
         />
       )}
       {req && !openQ && req.status === "approved" && (
-        <Outcome tone="teal" title="Approved by reviewer" body="A person reviewed and approved your request." confidence={req.confidence} tx={tx} />
+        <Outcome tone="teal" title="Approved by reviewer" body="A person reviewed and approved your request." confidence={req.confidence} tx={tx ?? req.tx} />
       )}
       {req && req.status === "escalated" && (
         <Outcome

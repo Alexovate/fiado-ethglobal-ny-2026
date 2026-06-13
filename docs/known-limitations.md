@@ -12,7 +12,7 @@ production, and would not hide if asked:
   `_disburse` does not reject a disbursement after it. Fix: `require(block.timestamp < line.expiresAt)`.
 - **`repay` is permissionless.** Anyone can repay a line and raise that human's
   reputation. Harmless for the demo (repaying someone's debt only helps them),
-  but reputation should credit the borrower, not the payer-of-record.
+  but reputation should credit the customer, not the payer-of-record.
 - **`closeLine` ignores outstanding balance.** Owner can close a line with debt
   still owed. Fix: `require(line.outstanding == 0)` (or an explicit write-off path).
 - **Owner/operator is a single EOA.** Production wants a multisig/timelock for
@@ -49,14 +49,14 @@ on-chain value. The mechanism is identical at 1:1.
 
 - **How do you underwrite someone with no credit score?** An AI agent (Claude)
   reads verified personhood, repayment history, the requested amount and purpose,
-  and can ask the borrower one clarifying question — then grants, escalates, or
+  and can ask the customer one clarifying question — then grants, escalates, or
   declines. It reasons *inside* hard guardrails (auto-grant under 5 USDC,
   force-escalate over the limit); the policy and contract enforce the bounds, so
   the agent can never widen a limit.
-- **What stops a person stacking up loans?** One open loan per verified human
+- **What stops a person stacking up tabs?** One open tab per verified human
   until repaid (backend-enforced), plus on-chain caps (one line per nullifier,
   line maxAmount, mandate per-tx/total). The same person is blocked from new
-  credit until the operator marks the loan repaid.
+  credit until the operator marks the tab repaid.
 - **Is this lending?** No — merchant store credit. The customer never receives
   cash; the merchant is paid directly in USDC.
 - **Is the AI moving money on its own?** Only within a mandate a human signed on a

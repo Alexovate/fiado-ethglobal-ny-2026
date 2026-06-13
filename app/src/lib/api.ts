@@ -125,7 +125,7 @@ export interface CreditRequest {
   merchant: string;
   amountDisplay: number;
   purpose: string;
-  status: "need_info" | "auto_approved" | "escalated" | "approved" | "declined" | "disbursed";
+  status: "need_info" | "auto_approved" | "escalated" | "approved" | "declined" | "disbursed" | "repaid";
   route: "AUTO" | "ESCALATE" | "NEED_INFO";
   confidence: number;
   reasonCodes: string[];
@@ -147,6 +147,8 @@ export const requests = {
   ask: (id: string, text: string) => post<CreditRequest>(`/request/${id}/ask`, { text }),
   decide: (id: string, decision: "approve" | "decline") =>
     post<CreditRequest>(`/request/${id}/decide`, { decision }),
+  disbursed: (id: string, lineId: string, tx: string) =>
+    post<CreditRequest>(`/request/${id}/disbursed`, { lineId, tx }),
 };
 
 export const EXPLORER = "https://testnet.arcscan.app";

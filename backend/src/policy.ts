@@ -23,7 +23,7 @@ export interface PolicyInput {
   recentRequestCount: number; // within the velocity window
   velocityMax: number;
   confidenceThreshold: number;
-  intakeAnswered?: boolean; // borrower answered the agent's clarifying question
+  intakeAnswered?: boolean; // customer answered the agent's clarifying question
 }
 
 export interface PolicyResult {

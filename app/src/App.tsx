@@ -506,11 +506,11 @@ export default function App() {
           </Card>
 
           <Card>
-            <SectionLabel>Borrower reputation</SectionLabel>
+            <SectionLabel>Customer reputation</SectionLabel>
             <div className="mt-2 flex items-center gap-2 text-sm">
-              <span className="font-semibold">{scenario.borrower.reputationTier}</span>
+              <span className="font-semibold">{scenario.customer.reputationTier}</span>
               <span className="text-faint">·</span>
-              <span className="text-muted">{scenario.borrower.tabsRepaid} repaid</span>
+              <span className="text-muted">{scenario.customer.tabsRepaid} repaid</span>
             </div>
             <div className="mt-2 text-xs text-faint">
               On repayment, reputation rises and the future credit line grows.

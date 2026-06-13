@@ -24,7 +24,7 @@ export function LedgerModal({
   onApprove: () => void;
   onDecline: () => void;
 }) {
-  const b = scenario.borrower;
+  const c = scenario.customer;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
@@ -79,18 +79,18 @@ export function LedgerModal({
             <p className="mt-2 text-sm leading-relaxed text-ink/90">{scenario.agentRecommendation}</p>
           </div>
 
-          {/* Borrower details */}
+          {/* Customer details */}
           <div className="mt-5">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">
-              Borrower (World ID verified)
+              Customer (World ID verified)
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2">
-              <Stat label="Reputation" value={b.reputationTier} accent />
-              <Stat label="Tabs repaid" value={b.tabsRepaid} />
-              <Stat label="Total repaid" value={usdc(b.totalRepaid)} />
-              <Stat label="Default rate" value={b.defaultRate} accent />
-              <Stat label="Prior largest" value={usdc(b.priorMax)} />
-              <Stat label="Verified · since" value={`${b.verifiedLevel} · ${b.memberSince}`} />
+              <Stat label="Reputation" value={c.reputationTier} accent />
+              <Stat label="Tabs repaid" value={c.tabsRepaid} />
+              <Stat label="Total repaid" value={usdc(c.totalRepaid)} />
+              <Stat label="Default rate" value={c.defaultRate} accent />
+              <Stat label="Prior largest" value={usdc(c.priorMax)} />
+              <Stat label="Verified · since" value={`${c.verifiedLevel} · ${c.memberSince}`} />
             </div>
           </div>
         </div>

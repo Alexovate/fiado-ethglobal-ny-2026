@@ -12,11 +12,18 @@ export interface HumanRecord {
 const humans = new Map<string, HumanRecord>();
 
 export function markVerified(nullifierHash: string): HumanRecord {
+  if (!nullifierHash) throw new Error("nullifierHash required");
   let h = humans.get(nullifierHash);
   if (!h) {
     h = { nullifierHash, verifiedAt: Date.now(), reputation: 0n, outstanding: 0n, requestTimestamps: [] };
     humans.set(nullifierHash, h);
   }
+  return h;
+}
+
+function requireHuman(nullifierHash: string): HumanRecord {
+  const h = humans.get(nullifierHash);
+  if (!h) throw new Error("human not verified");
   return h;
 }
 
@@ -33,7 +40,7 @@ export function hasOutstanding(nullifierHash: string): boolean {
 }
 
 export function recordRequest(nullifierHash: string, now: number): number[] {
-  const h = markVerified(nullifierHash);
+  const h = requireHuman(nullifierHash);
   h.requestTimestamps.push(now);
   return h.requestTimestamps;
 }
@@ -46,12 +53,12 @@ export function getTotalOutstanding(): bigint {
 
 /** A granted disbursement increases what this human owes (the credit-limit gate). */
 export function addOutstanding(nullifierHash: string, amount: bigint): void {
-  markVerified(nullifierHash).outstanding += amount;
+  requireHuman(nullifierHash).outstanding += amount;
 }
 
-/** Operator marks the loan repaid: clear the balance and credit reputation. */
+/** Operator marks the tab repaid: clear the balance and credit reputation. */
 export function settleHuman(nullifierHash: string): bigint {
-  const h = markVerified(nullifierHash);
+  const h = requireHuman(nullifierHash);
   const repaid = h.outstanding;
   h.reputation += repaid;
   h.outstanding = 0n;

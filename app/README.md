@@ -1,11 +1,17 @@
-# app — Fiado mission control
+# app — Fiado customer, operator, and demo surfaces
 
-The judge-facing demo surface. One dark, projector-legible screen showing the
-whole system: customer request, the human-set mandate (the frame), the agent's
-reasoning trace, merchant settlement on Arc, and the physical-Ledger escalation
-gate.
+One hash-routed Vite app with three surfaces: the phone-shaped customer flow,
+the live operator dashboard, and a scripted mission-control fallback.
 
 Vite + React + TypeScript + Tailwind v4 + framer-motion.
+
+## The live surfaces
+
+- `#customer` — World ID 4.0 via IDKit, customer standing, store-credit request,
+  agent/reviewer questions, approval state, and ArcScan tx link when available.
+- `/` — operator dashboard polling the backend every 2s, with agent decisions,
+  human review, customer context, Ledger approval, repayment, and tx links.
+- `#demo` — scripted mission-control fallback for the two choreographed moments.
 
 ## The two choreographed moments
 
@@ -14,7 +20,7 @@ Vite + React + TypeScript + Tailwind v4 + framer-motion.
 - **High-value · 1,500 → escalation** — outside the per-tx cap, confidence 0.71
   → the agent stops and opens a rich Ledger approval modal containing everything
   a human needs to decide: **why the agent is unsure**, the **agent's assessment +
-  recommendation**, and the **full borrower profile** (reputation, repayment
+  recommendation**, and the **full customer profile** (reputation, repayment
   history, default rate). The human confirms on the device, then Arc settles.
 
 Design intent: the human only sets the frame once; the agent operates
@@ -38,5 +44,6 @@ Two modes via the toggle:
   device → `approveAndDisburse`. Merchant balance and tx links come from Arc.
   Verified end-to-end on Arc testnet.
 
-Note: live mode currently uses fixed demo nullifiers; wiring IDKit so the
-nullifier comes from a real World ID proof is the remaining World integration.
+Note: the scripted `#demo` live toggle uses fixed demo nullifiers for repeatable
+Arc runs. The `#customer` surface is the real World ID path: IDKit result →
+backend `/verify` → verified nullifier → request state machine.

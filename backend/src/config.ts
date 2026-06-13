@@ -33,12 +33,12 @@ export const config = {
   confidenceThreshold: Number(env("POLICY_CONFIDENCE_THRESHOLD", "0.85")),
   velocityWindowMs: Number(env("POLICY_VELOCITY_WINDOW_MS", "60000")),
   velocityMaxInWindow: Number(env("POLICY_VELOCITY_MAX", "5")),
-  // Above this amount the agent asks the borrower a clarifying question first.
+  // Above this amount the agent asks the customer a clarifying question first.
   questionThresholdDisplay: BigInt(env("POLICY_QUESTION_THRESHOLD", "50")) * 1_000_000n,
   // At/under this amount, credit is auto-granted (no agent reasoning needed).
   autoGrantThresholdDisplay: BigInt(env("POLICY_AUTO_GRANT_THRESHOLD", "5")) * 1_000_000n,
-  // Per-borrower credit limit. Available credit = this minus current outstanding;
-  // no new credit once outstanding reaches it, until the loan is repaid.
+  // Per-customer credit limit. Available credit = this minus current outstanding;
+  // no new credit once outstanding reaches it, until the tab is repaid.
   creditLimitDisplay: BigInt(env("POLICY_CREDIT_LIMIT", "250")) * 1_000_000n,
 
   // Demo seed mandate (real one is signed on the Ledger; this mirrors it for quotes)

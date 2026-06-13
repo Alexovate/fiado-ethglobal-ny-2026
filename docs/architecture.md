@@ -6,7 +6,7 @@
 The gray-zone underwriting is done by an **AI agent** (the `claude` CLI spawned
 headless on a Max subscription) between the verifier and the contract:
 `≤5 USDC` auto-grant (rule) · gray zone → agent (grant / ask / escalate) ·
-`>limit` → human + Ledger. Credit limit: one open loan per human until repaid.
+`>limit` → human + Ledger. Credit limit: one open tab per human until repaid.
 
 ```
 +------------------+        +-----------------------------+

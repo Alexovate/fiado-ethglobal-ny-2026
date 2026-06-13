@@ -3,7 +3,7 @@
 > **Verified-human store credit, underwritten by an AI agent, settled on-chain.**
 > A real person (World ID) gets instant "buy now, pay later" — the merchant is
 > paid directly in USDC, the customer never touches cash. An AI agent approves
-> the everyday loans on its own; a human approves the big or risky ones on a
+> the everyday store-credit tabs on its own; a human approves the big or risky ones on a
 > physical Ledger.
 
 ETHGlobal New York 2026 prototype. Clean-room build — not production code.
@@ -19,18 +19,18 @@ escapes it.
 ## The decision flow
 
 ```
-A loan request comes in →
+A store-credit request comes in →
   ≤ 5 USDC, no open balance      → auto-granted instantly        (rule)
   gray zone (e.g. 12 USDC)       → the AI agent decides:          (Claude)
         grant · ask one question · escalate
   > the credit limit / risky     → escalate to a human           (rule + agent judgement)
                                     who reviews, can chat with the
-                                    borrower, and approves on a Ledger
+                                    customer, and approves on a Ledger
 ```
 
 Two hard guarantees no AI can override, enforced on-chain by the contract:
 **one active line per verified human**, and **no new credit while a balance is
-owed** (one loan at a time, until repaid).
+owed** (one open tab at a time, until repaid).
 
 ## How the AI agent works
 
@@ -39,8 +39,8 @@ The agent's brain is the **`claude` CLI spawned headless** by the backend, with
 subscription** — no API key, no per-call cost. It runs Haiku with a clean,
 MCP-free system prompt and returns a structured decision
 (`grant · decline · ask · escalate` + reasoning + confidence). The agent only
-reasons **inside** the deterministic guardrails (small loans are auto-granted
-upstream, over-cap loans are force-escalated) and can never widen a limit — the
+reasons **inside** the deterministic guardrails (small tabs are auto-granted
+upstream, over-cap requests are force-escalated) and can never widen a limit — the
 policy and the smart contract enforce the bounds. If the agent is ever
 unavailable, the backend falls back to a deterministic policy.
 
@@ -78,8 +78,8 @@ flowchart TD
 
 | URL | Who | What |
 | --- | --- | --- |
-| `#customer` | Borrower (phone) | Verify with World ID → see standing → request credit → answer the agent's question if asked |
-| _default_ `/` (`#ops`) | Operator (laptop) | Live feed of every request + the agent's decision in real time; review & decide escalations on the Ledger; mark loans repaid |
+| `#customer` | Customer (phone) | Verify with World ID → see standing → request credit → answer the agent's question if asked |
+| _default_ `/` (`#ops`) | Operator (laptop) | Live feed of every request + the agent's decision in real time; review & decide escalations on the Ledger; mark tabs repaid |
 | `#demo` | — | Scripted mission-control (backup narrative) |
 
 ### Customer mini app
@@ -94,7 +94,7 @@ flowchart TD
 | Path | Contents |
 | --- | --- |
 | `contracts/` | `CreditLine.sol` + 17 Foundry tests + deploy script |
-| `backend/` | World ID verify (IDKit 4.0 / `verifyCloudProof`), credit-request state machine, **AI agent brain** (`brain.ts`), deterministic policy fallback, Arc client + RP-signature signing |
+| `backend/` | World ID verify (IDKit 4.0 / `/api/v4/verify/{rp_id}`), credit-request state machine, **AI agent brain** (`brain.ts`), deterministic policy fallback, Arc client + RP-signature signing |
 | `app/` | The three surfaces: `CustomerView`, `OperatorDashboard`, scripted `App` |
 | `docs/` | Architecture, demo script, known limitations / Q&A |
 | `feedback/` | `ledger.md` — Ledger SDK/docs feedback |
@@ -118,7 +118,7 @@ flowchart TD
   real scan (`ok=true`).
 - **Real AI underwriting:** the gray-zone decision is a live Claude call (Max
   subscription), with the deterministic policy as a fallback.
-- **Real credit-limit enforcement:** one open loan per human until repaid;
+- **Real credit-limit enforcement:** one open tab per human until repaid;
   the operator marks repayment, which frees credit and repays on-chain.
 - **Scaled for demo:** on-chain settlement = displayed amount ÷ `DEMO_SCALE_DIVISOR`
   so one testnet faucet covers the demo. The mechanism is identical at 1:1.

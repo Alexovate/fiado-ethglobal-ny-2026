@@ -10,7 +10,9 @@
 
 ## 0. Current Ground Truth
 
-As of June 13, 2026, the workspace contains this PRD only. The repo must now start from scratch, with frequent commits.
+As of June 14, 2026, the repo contains the clean-room Fiado prototype: Arc
+contracts, backend verifier/agent/orchestrator, three hash-routed app surfaces,
+public README, architecture notes, demo script, and known limitations.
 
 ETHGlobal New York 2026 public schedule:
 - Project submissions due: **Sunday, June 14, 2026 at 09:00 EDT / 15:00 CEST**.
@@ -56,8 +58,8 @@ A human does not approve every 18 USDC purchase — that would never scale. The 
 4. **Do not overpromise Ledger Clear Signing.**
    Ledger Clear Signing can require registry metadata and an `originToken`; without that it may fall back to blind signing. The must-have is a reliable **Ledger/Speculos human-in-the-loop approval gate**. ERC-7730/Clear Signing polish is stretch.
 
-5. **Build one demo surface, not five apps.**
-   Judges need to understand the whole system in seconds. Build a "mission control" demo that shows customer, merchant, agent reasoning, Arc transaction, and Ledger approval in one choreographed view.
+5. **Build one coherent demo, not five disconnected apps.**
+   Judges need to understand the whole system in seconds. The primary live demo now uses two surfaces — phone customer flow plus operator dashboard — with the scripted mission-control view kept as the fallback narrative.
 
 ---
 
@@ -462,7 +464,7 @@ Do not use:
 Pilot facts only:
 - 3 merchants
 - 28 transactions
-- 23 borrowers
+- 23 customers
 - 87% positive feedback
 - 6-day pilot
 

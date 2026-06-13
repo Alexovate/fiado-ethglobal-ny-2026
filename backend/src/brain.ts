@@ -23,7 +23,7 @@ export interface CreditContext {
   defaultRate: string;
   maxPerTxDisplay: number;
   recentRequests: number;
-  priorAnswer?: string; // the borrower's answer to an earlier agent question
+  priorAnswer?: string; // the customer's answer to an earlier agent question
 }
 
 export interface BrainDecision {
@@ -43,9 +43,9 @@ Rules you must obey:
 - You may NOT exceed any limit. You only choose among: grant, decline, ask, escalate.
 - "grant": fund it now (you're confident it's a real, repayable purchase).
 - "ask": you need ONE clarifying question first (set "question"). Use when the
-  purpose is vague or the amount is unusual for this borrower.
+  purpose is vague or the amount is unusual for this customer.
 - "escalate": a human should decide on the Ledger — use when the amount is large
-  relative to history, the borrower has many recent requests, or risk feels high
+  relative to history, the customer has many recent requests, or risk feels high
   even with good history.
 - "decline": only for clear abuse signals.
 - Favor financial inclusion: a clean repayment record should be rewarded.
@@ -61,7 +61,7 @@ function buildPrompt(ctx: CreditContext): string {
     `Requested: ${usd(ctx.amountDisplay)} USDC`,
     `Purpose: ${ctx.purpose || "(not stated)"}`,
     `Per-transaction cap: ${usd(ctx.maxPerTxDisplay)} USDC`,
-    `Borrower reputation: ${ctx.reputationTier}`,
+    `Customer reputation: ${ctx.reputationTier}`,
     `Tabs repaid: ${ctx.tabsRepaid}`,
     `Total repaid: ${usd(ctx.totalRepaidDisplay)} USDC`,
     `Current outstanding: ${usd(ctx.outstandingDisplay)} USDC`,
@@ -69,7 +69,7 @@ function buildPrompt(ctx: CreditContext): string {
     `Default rate: ${ctx.defaultRate}`,
     `Requests in the last minute: ${ctx.recentRequests}`,
   ];
-  if (ctx.priorAnswer) lines.push(`Borrower's answer to your earlier question: "${ctx.priorAnswer}"`);
+  if (ctx.priorAnswer) lines.push(`Customer's answer to your earlier question: "${ctx.priorAnswer}"`);
   return `Decide this store-credit request:\n${lines.join("\n")}`;
 }
 

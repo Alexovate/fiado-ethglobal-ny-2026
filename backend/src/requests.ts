@@ -1,6 +1,6 @@
 // Credit-request state machine — the conversational underwriting loop.
 // Not a chat: a shared request object both the customer and the human operator
-// read and update. The agent may ask the borrower a clarifying question; if it
+// read and update. The agent may ask the customer a clarifying question; if it
 // still cannot clear the request, a human reviews everything (answers included),
 // may ask one more question, then decides and approves on the Ledger.
 
@@ -10,13 +10,13 @@ import { getHuman, recordRequest, getOutstanding, addOutstanding } from "./store
 import { decideCredit, type CreditContext } from "./brain.js";
 
 export type ReqStatus =
-  | "need_info" // a question is open, waiting on the borrower
+  | "need_info" // a question is open, waiting on the customer
   | "auto_approved" // inside mandate, high confidence — agent can disburse
   | "escalated" // needs a human (operator) decision on the Ledger
   | "approved" // human approved — ready to disburse via escalation path
   | "declined"
   | "disbursed"
-  | "repaid"; // loan paid back — credit freed
+  | "repaid"; // tab paid back — credit freed
 
 export interface Question {
   id: string;
@@ -98,7 +98,7 @@ async function evaluate(r: CreditRequest): Promise<void> {
     return;
   }
 
-  // Once a HUMAN has stepped in (asked the borrower a question), the case stays
+  // Once a HUMAN has stepped in (asked the customer a question), the case stays
   // with the human — the agent does not re-decide. The operator reads the answer
   // and approves/declines on the Ledger. (Answers just bounce back to escalated.)
   if (r.questions.some((q) => q.askedBy === "human")) {
@@ -111,8 +111,8 @@ async function evaluate(r: CreditRequest): Promise<void> {
   const human = getHuman(r.nullifierHash);
   const outstanding = getOutstanding(r.nullifierHash);
 
-  // TIER 0 — one open loan at a time: with any unpaid balance, no new credit
-  // until it's repaid. This is what stops a verified human from stacking up loans.
+  // TIER 0 — one open tab at a time: with any unpaid balance, no new credit
+  // until it's repaid. This is what stops a verified human from stacking up tabs.
   if (outstanding > 0n) {
     r.route = "ESCALATE";
     r.status = "declined";
@@ -123,7 +123,7 @@ async function evaluate(r: CreditRequest): Promise<void> {
     r.decidedBy = "rule";
     return;
   }
-  // Also never exceed the per-borrower credit limit in a single request.
+  // Also never exceed the per-customer credit limit in a single request.
   if (amount > config.creditLimitDisplay) {
     r.route = "ESCALATE";
     r.status = "escalated";
@@ -163,7 +163,7 @@ async function evaluate(r: CreditRequest): Promise<void> {
   const ctx: CreditContext = {
     amountDisplay: r.amountDisplay,
     purpose: r.purpose,
-    reputationTier: established ? "Established" : "New borrower",
+    reputationTier: established ? "Established" : "New customer",
     tabsRepaid: established ? "8 / 8" : "0 / 0",
     totalRepaidDisplay: Number(human?.reputation ?? 0n),
     outstandingDisplay: Number(outstanding),
@@ -243,7 +243,7 @@ export function list(): CreditRequest[] {
   return [...requests.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-/** The borrower's most recent request still waiting on an unanswered question. */
+/** The customer's most recent request still waiting on an unanswered question. */
 export function latestOpenForHuman(nullifierHash: string): CreditRequest | undefined {
   let found: CreditRequest | undefined;
   for (const r of requests.values()) {
@@ -271,7 +271,7 @@ export async function answer(
   return r;
 }
 
-/** Human operator poses an additional question to the borrower. */
+/** Human operator poses an additional question to the customer. */
 export function ask(id: string, text: string): CreditRequest | undefined {
   const r = requests.get(id);
   if (!r) return undefined;
@@ -293,12 +293,16 @@ export function decide(id: string, decision: "approve" | "decline"): CreditReque
   return r;
 }
 
-export function markDisbursed(id: string, lineId: string, tx: string): void {
+export function markDisbursed(id: string, lineId: string, tx: string): CreditRequest | undefined {
   const r = requests.get(id);
-  if (!r) return;
+  if (!r) return undefined;
+  if (r.status !== "approved" && r.status !== "auto_approved" && r.status !== "disbursed") {
+    addOutstanding(r.nullifierHash, BigInt(r.amountDisplay));
+  }
   r.lineId = lineId;
   r.tx = tx;
   r.status = "disbursed";
+  return r;
 }
 
 export function markRepaid(id: string): void {

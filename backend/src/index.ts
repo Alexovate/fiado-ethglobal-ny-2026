@@ -59,9 +59,9 @@ app.get("/customer/status", (req: Request, res: Response) => {
   const nullifier = String(req.query.nullifier ?? "");
   const human = getHuman(nullifier);
   const open = requests.latestOpenForHuman(nullifier);
-  const reputationTier = human && human.reputation > 0n ? "Established" : "New borrower";
+  const reputationTier = human && human.reputation > 0n ? "Established" : "New customer";
   const outstanding = getOutstanding(nullifier);
-  // One open loan at a time: no available credit while a balance is owed.
+  // One open tab at a time: no available credit while a balance is owed.
   const available = outstanding > 0n ? 0n : config.creditLimitDisplay;
   json(res, {
     verified: Boolean(human),
@@ -74,12 +74,15 @@ app.get("/customer/status", (req: Request, res: Response) => {
   });
 });
 
-// Operator marks a borrower's loan repaid: clears the balance (frees credit) and
+// Operator marks a customer's tab repaid: clears the balance (frees credit) and
 // repays on-chain via the relayer so the contract reputation reflects it.
 app.post("/repay", async (req: Request, res: Response) => {
   const nullifierHash = String(req.body?.nullifierHash ?? "");
   const requestId = req.body?.requestId ? String(req.body.requestId) : null;
   if (!nullifierHash) return json(res, { error: "nullifierHash required" }, 400);
+  if (!getHuman(nullifierHash)) {
+    return json(res, { error: "human not verified — cannot repay unknown nullifier" }, 403);
+  }
   const repaidDisplay = settleHuman(nullifierHash); // immediate off-chain settlement
   if (requestId) requests.markRepaid(requestId); // flip the card to "repaid" right away
   let hash: string | null = null;
@@ -105,6 +108,7 @@ app.post("/verify", async (req: Request, res: Response) => {
       (result.detail ? ` detail=${result.detail}` : ""),
   );
   if (!result.ok) return json(res, { ...result }, 401);
+  if (!result.nullifierHash) return json(res, { error: "verified proof did not include a nullifier" }, 400);
 
   markVerified(result.nullifierHash);
   json(res, {
@@ -147,11 +151,12 @@ app.post("/credit/quote", (req: Request, res: Response) => {
   if (!nullifierHash || amount === undefined) {
     return json(res, { error: "nullifierHash and amount required" }, 400);
   }
+  const human = getHuman(nullifierHash);
+  if (!human) return json(res, { error: "human not verified — complete World ID first" }, 403);
 
   const now = Date.now();
   const timestamps = recordRequest(nullifierHash, now);
   const recent = timestamps.filter((t) => now - t <= config.velocityWindowMs).length;
-  const human = getHuman(nullifierHash);
 
   const input: PolicyInput = {
     amount: BigInt(amount),
@@ -354,6 +359,14 @@ app.post("/request/:id/ask", (req: Request, res: Response) => {
 
 app.post("/request/:id/decide", (req: Request, res: Response) => {
   const r = requests.decide(String(req.params.id), req.body?.decision === "approve" ? "approve" : "decline");
+  if (!r) return json(res, { error: "not found" }, 404);
+  json(res, r);
+});
+
+app.post("/request/:id/disbursed", (req: Request, res: Response) => {
+  const { lineId, tx } = req.body ?? {};
+  if (!lineId || !tx) return json(res, { error: "lineId and tx required" }, 400);
+  const r = requests.markDisbursed(String(req.params.id), String(lineId), String(tx));
   if (!r) return json(res, { error: "not found" }, 404);
   json(res, r);
 });

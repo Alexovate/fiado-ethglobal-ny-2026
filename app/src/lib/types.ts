@@ -21,8 +21,8 @@ export interface EscalationReason {
   plain: string;
 }
 
-/** Everything the agent knows about the borrower — shown to the human at escalation. */
-export interface BorrowerProfile {
+/** Everything the agent knows about the customer — shown to the human at escalation. */
+export interface CustomerProfile {
   nullifierShort: string; // World ID nullifier, abbreviated
   verifiedLevel: string; // e.g. "Orb"
   memberSince: string;
@@ -42,7 +42,7 @@ export interface Scenario {
   confidence: number; // 0..1
   route: Route;
   trace: TraceStep[];
-  borrower: BorrowerProfile;
+  customer: CustomerProfile;
   /** Present only for ESCALATE. */
   escalationReasons?: EscalationReason[];
   agentRecommendation?: string;
