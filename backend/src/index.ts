@@ -301,6 +301,10 @@ app.post("/request", async (req: Request, res: Response) => {
   json(res, r);
 });
 
+app.get("/requests", (_req: Request, res: Response) => {
+  json(res, { requests: requests.list() });
+});
+
 app.get("/request/:id", (req: Request, res: Response) => {
   const r = requests.get(String(req.params.id));
   if (!r) return json(res, { error: "not found" }, 404);

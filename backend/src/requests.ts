@@ -202,6 +202,11 @@ export function get(id: string): CreditRequest | undefined {
   return requests.get(id);
 }
 
+/** All requests, newest first — for the live operator dashboard. */
+export function list(): CreditRequest[] {
+  return [...requests.values()].sort((a, b) => b.createdAt - a.createdAt);
+}
+
 /** The borrower's most recent request still waiting on an unanswered question. */
 export function latestOpenForHuman(nullifierHash: string): CreditRequest | undefined {
   let found: CreditRequest | undefined;

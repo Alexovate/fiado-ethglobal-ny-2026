@@ -135,6 +135,10 @@ export const requests = {
   get: (id: string) => get<CreditRequest>(`/request/${id}`),
   answer: (id: string, questionId: string, answer: string) =>
     post<CreditRequest>(`/request/${id}/answer`, { questionId, answer }),
+  list: () => get<{ requests: CreditRequest[] }>("/requests"),
+  ask: (id: string, text: string) => post<CreditRequest>(`/request/${id}/ask`, { text }),
+  decide: (id: string, decision: "approve" | "decline") =>
+    post<CreditRequest>(`/request/${id}/decide`, { decision }),
 };
 
 export const EXPLORER = "https://testnet.arcscan.app";
