@@ -42,3 +42,8 @@ pnpm-debug.log*
 # working infrastructure — our brain / scratch, never part of the product
 BRAIN.md
 .brain/
+
+# tooling artifacts
+.playwright-mcp/
+fiado-*.png
+*.tsbuildinfo
