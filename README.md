@@ -53,13 +53,26 @@ Customer / Demo UI
 | `docs/` | Architecture diagram, demo script, judging notes |
 | `feedback/` | `ledger.md` — Ledger docs/SDK feedback + screenshots |
 
+## Deployed (Arc Testnet · chainId 5042002)
+
+- **CreditLine:** [`0x0068589C0F011c9EB2d054293d6dB8594dc5031e`](https://testnet.arcscan.app/address/0x0068589C0F011c9EB2d054293d6dB8594dc5031e)
+- USDC (ERC-20, 6 dec): `0x3600000000000000000000000000000000000000`
+- Proof tx — `openLine` accepted with a backend signature, on-chain:
+  [`0xc4b2e06f…cf7cfa42e`](https://testnet.arcscan.app/tx/0xc4b2e06fe74a02cad0bbfcbc2c4e84213851a647cdd75a27e604931cf7cfa42e)
+
 ## What is real vs mocked
 
-_Filled in as we build._
-
-- Real: _TBD_
-- Mocked: _TBD_
+- **Real:** `CreditLine` deployed on Arc; merchant registration, credit-line
+  opening with backend signature, and the USDC pool all verified on-chain;
+  contract-enforced mandate bounds + escalation gate; deterministic policy engine.
+- **Real (pending device):** mandate signing and escalation approval use the
+  physical Ledger — wired via WebHID.
+- **Scaled for demo:** on-chain settlement = displayed amount ÷ `DEMO_SCALE_DIVISOR`
+  so a single testnet faucet covers the demo. The mechanism is identical at 1:1.
+- **Mocked until wired:** World ID proof can run through `DEMO_MOCK_MODE` as a
+  rehearsal fallback; the live path verifies real World ID proofs.
 
 ## Setup
 
-See `.env.example`. _Setup steps TBD as components land._
+See `.env.example`. Contracts: `cd contracts && forge test`. Backend:
+`cd backend && npm i && npm run dev`. App: `cd app && npm i && npm run dev`.
