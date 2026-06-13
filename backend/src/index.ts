@@ -52,6 +52,21 @@ app.post("/rp-signature", (req: Request, res: Response) => {
   }
 });
 
+// Customer standing after verification: creditworthiness + any pending question.
+app.get("/customer/status", (req: Request, res: Response) => {
+  const nullifier = String(req.query.nullifier ?? "");
+  const human = getHuman(nullifier);
+  const open = requests.latestOpenForHuman(nullifier);
+  const reputationTier = human && human.reputation > 0n ? "Established" : "New borrower";
+  json(res, {
+    verified: Boolean(human),
+    reputationTier,
+    availableDisplay: config.mandate.maxPerTx, // demo: per-tx cap is the available line
+    openRequestId: open?.id ?? null,
+    openQuestion: open?.questions.find((q) => q.answer === undefined)?.text ?? null,
+  });
+});
+
 // 1) World ID proof -> verified human, one line per human enforced downstream.
 app.post("/verify", async (req: Request, res: Response) => {
   const proof = req.body?.proof as WorldProof | undefined;

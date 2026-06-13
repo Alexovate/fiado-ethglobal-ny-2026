@@ -128,6 +128,21 @@ export function get(id: string): CreditRequest | undefined {
   return requests.get(id);
 }
 
+/** The borrower's most recent request still waiting on an unanswered question. */
+export function latestOpenForHuman(nullifierHash: string): CreditRequest | undefined {
+  let found: CreditRequest | undefined;
+  for (const r of requests.values()) {
+    if (
+      r.nullifierHash === nullifierHash &&
+      r.status === "need_info" &&
+      r.questions.some((q) => q.answer === undefined)
+    ) {
+      if (!found || r.createdAt > found.createdAt) found = r;
+    }
+  }
+  return found;
+}
+
 export function answer(id: string, questionId: string, text: string): CreditRequest | undefined {
   const r = requests.get(id);
   if (!r) return undefined;

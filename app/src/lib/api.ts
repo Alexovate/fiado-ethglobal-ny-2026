@@ -54,6 +54,16 @@ export const api = {
       proof,
     }),
 
+  // Customer standing after verification.
+  customerStatus: (nullifier: string) =>
+    get<{
+      verified: boolean;
+      reputationTier: string;
+      availableDisplay: string;
+      openRequestId: string | null;
+      openQuestion: string | null;
+    }>(`/customer/status?nullifier=${nullifier}`),
+
   state: (merchant: string) =>
     get<{ merchantBalanceDisplay: string; totalOutstandingDisplay: string }>(
       `/onchain/state?merchant=${merchant}`,

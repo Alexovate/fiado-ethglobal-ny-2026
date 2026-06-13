@@ -4,18 +4,26 @@ import { api, requests, EXPLORER, type CreditRequest } from "./lib/api";
 import { CHAIN } from "./lib/scenarios";
 import { usdc, pct } from "./lib/format";
 
-// Customer-facing surface for an EXTERNAL World ID app (IDKit). The borrower asks
-// for store credit; verifies personhood via World ID (QR on desktop / deeplink on
-// phone); the agent may ask a clarifying question; large/uncertain requests go to
-// a human reviewer. Phone-shaped on purpose. Hosted on Vercel for the live demo.
+// Customer surface (External World ID app, IDKit). Flow: verify first -> see your
+// standing (creditworthiness + any unanswered agent question) -> request store
+// credit -> the agent may ask a question -> approved / escalated. Phone-shaped.
 
 const APP_ID = (import.meta.env.VITE_WORLD_APP_ID as `app_${string}`) ?? "app_staging";
 const ACTION = (import.meta.env.VITE_WORLD_ACTION as string) ?? "fiado-credit-line";
+
+interface Status {
+  verified: boolean;
+  reputationTier: string;
+  availableDisplay: string;
+  openRequestId: string | null;
+  openQuestion: string | null;
+}
 
 export default function CustomerView() {
   const [amount, setAmount] = useState("80");
   const [purpose, setPurpose] = useState("");
   const [nullifier, setNullifier] = useState<string | null>(null);
+  const [status, setStatus] = useState<Status | null>(null);
   const [req, setReq] = useState<CreditRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -31,17 +39,29 @@ export default function CustomerView() {
   };
   useEffect(() => stopPoll, []);
 
-  const startRequest = useCallback(
-    async (nullifierHash: string) => {
-      const base = Math.round(parseFloat(amount || "0") * 1_000_000);
-      const r = await requests.create(nullifierHash, CHAIN.merchant, base, purpose);
-      setNullifier(nullifierHash);
-      setReq(r);
+  const loadStatus = useCallback(async (n: string) => {
+    const s = await api.customerStatus(n);
+    setStatus(s);
+  }, []);
+
+  // After a successful World ID proof: remember the human + load their standing.
+  const onVerified = useCallback(
+    async (p: IDKitResult) => {
+      setErr(null);
+      setBusy(true);
+      try {
+        const { nullifierHash } = await api.verifyProof(p);
+        setNullifier(nullifierHash);
+        await loadStatus(nullifierHash);
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
     },
-    [amount, purpose],
+    [loadStatus],
   );
 
-  // Fetch a fresh RP signature from the backend, then open the IDKit widget.
   const startVerify = useCallback(async () => {
     setErr(null);
     setBusy(true);
@@ -62,29 +82,48 @@ export default function CustomerView() {
     }
   }, []);
 
-  // IDKit returns a 4.0 result -> backend forwards it as-is to v4 verify ->
-  // start the request with the nullifier the backend extracted from the proof.
-  const handleVerify = useCallback(
-    async (result: IDKitResult) => {
-      const { nullifierHash } = await api.verifyProof(result);
-      await startRequest(nullifierHash);
-    },
-    [startRequest],
-  );
-
-  // Offline rehearsal: skip the scan, use a demo nullifier (backend mock-accepts).
+  // Offline rehearsal: skip the scan with a demo nullifier (backend mock-accepts).
   const demoSkip = useCallback(async () => {
     setErr(null);
     setBusy(true);
     try {
       await api.verify(CHAIN.auto.nullifier);
-      await startRequest(CHAIN.auto.nullifier);
+      setNullifier(CHAIN.auto.nullifier);
+      await loadStatus(CHAIN.auto.nullifier);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
       setBusy(false);
     }
-  }, [startRequest]);
+  }, [loadStatus]);
+
+  const submitRequest = useCallback(async () => {
+    if (!nullifier) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const base = Math.round(parseFloat(amount || "0") * 1_000_000);
+      const r = await requests.create(nullifier, CHAIN.merchant, base, purpose);
+      setReq(r);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [nullifier, amount, purpose]);
+
+  const answerPending = useCallback(async () => {
+    if (!status?.openRequestId) return;
+    setBusy(true);
+    try {
+      const r = await requests.get(status.openRequestId);
+      setReq(r);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [status]);
 
   const sendAnswer = useCallback(
     async (questionId: string) => {
@@ -134,11 +173,12 @@ export default function CustomerView() {
   }, [req?.status, req?.id, nullifier]);
 
   const openQ = req?.questions.find((q) => q.answer === undefined);
-  const reset = () => {
+  const restart = () => {
     setReq(null);
-    setNullifier(null);
     setTx(null);
+    setErr(null);
     stopPoll();
+    if (nullifier) loadStatus(nullifier);
   };
 
   return (
@@ -151,35 +191,26 @@ export default function CustomerView() {
           <div className="font-bold leading-none">Fiado</div>
           <div className="text-[11px] text-faint">Doña Rosa Corner Store</div>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-[11px] text-muted">
-          buy now, pay later
-        </span>
+        {nullifier && (
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-teal/40 bg-teal-dim px-2.5 py-1 text-[11px] text-teal-bright">
+            <span className="h-1.5 w-1.5 rounded-full bg-teal" /> World ID
+          </span>
+        )}
       </header>
 
-      {/* request form + World ID verify */}
-      {!req && (
+      {/* STEP 1 — verify first */}
+      {!nullifier && (
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
-          <label className="text-xs text-muted">Amount (USDC)</label>
-          <input
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            inputMode="decimal"
-            className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-2xl font-bold outline-none focus:border-teal"
-          />
-          <label className="text-xs text-muted">What's it for? (optional)</label>
-          <input
-            value={purpose}
-            onChange={(e) => setPurpose(e.target.value)}
-            placeholder="e.g. groceries"
-            className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm outline-none focus:border-teal"
-          />
-
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Buy now, pay later</div>
+          <p className="text-sm text-muted">
+            Prove you're a real person to access store credit at Doña Rosa. One verified human, one credit line.
+          </p>
           <button
             onClick={startVerify}
             disabled={busy}
-            className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
+            className="mt-1 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
           >
-            {busy ? "Verifying…" : "Verify with World ID & request"}
+            {busy ? "Verifying…" : "Verify with World ID"}
           </button>
           {rpContext && (
             <IDKitRequestWidget
@@ -190,9 +221,8 @@ export default function CustomerView() {
               rp_context={rpContext}
               allow_legacy_proofs={true}
               preset={orbLegacy({})}
-              // After World App auth on a phone, return to this page in the browser.
               return_to={typeof window !== "undefined" ? window.location.href : undefined}
-              handleVerify={handleVerify}
+              handleVerify={onVerified}
               onSuccess={() => setOpen(false)}
               onError={(e: unknown) => setErr(`verification error: ${JSON.stringify(e)}`)}
             />
@@ -203,7 +233,70 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* agent / reviewer question */}
+      {/* STEP 2 — status + request (verified, no active request) */}
+      {nullifier && !req && (
+        <>
+          <div className="rounded-2xl border border-teal/30 bg-teal-dim/20 p-5">
+            <div className="flex items-center gap-2 text-teal">
+              <ShieldIcon />
+              <span className="font-semibold">Verified human</span>
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-faint">Standing</div>
+                <div className="font-semibold">{status?.reputationTier ?? "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-faint">Available credit</div>
+                <div className="font-semibold text-teal">{status ? usdc(Number(status.availableDisplay)) : "—"}</div>
+              </div>
+            </div>
+          </div>
+
+          {status?.openQuestion ? (
+            <div className="flex flex-col gap-3 rounded-2xl border border-amber/40 bg-amber-dim/30 p-5">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-bright">
+                You have an unanswered question
+              </div>
+              <p className="text-sm">{status.openQuestion}</p>
+              <button
+                onClick={answerPending}
+                disabled={busy}
+                className="rounded-xl bg-amber px-4 py-2.5 text-sm font-bold text-[#3a2c10] disabled:opacity-40"
+              >
+                Answer it now
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Request store credit</div>
+              <label className="text-xs text-muted">Amount (USDC)</label>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="decimal"
+                className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-2xl font-bold outline-none focus:border-teal"
+              />
+              <label className="text-xs text-muted">What's it for? (optional)</label>
+              <input
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value)}
+                placeholder="e.g. groceries"
+                className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm outline-none focus:border-teal"
+              />
+              <button
+                onClick={submitRequest}
+                disabled={busy}
+                className="mt-1 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
+              >
+                {busy ? "Requesting…" : "Request store credit"}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* STEP 3 — agent chat (a question is open) */}
       {req && openQ && (
         <div className="flex flex-col gap-3 rounded-2xl border border-teal/30 bg-teal-dim/30 p-5">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-teal">
@@ -226,7 +319,7 @@ export default function CustomerView() {
         </div>
       )}
 
-      {/* outcomes */}
+      {/* STEP 4 — outcomes */}
       {req && !openQ && (req.status === "auto_approved" || req.status === "disbursed") && (
         <Outcome
           tone="teal"
@@ -254,11 +347,20 @@ export default function CustomerView() {
       {err && <div className="rounded-xl border border-red/40 bg-red/10 p-3 text-xs text-red">{err}</div>}
 
       {req && (
-        <button onClick={reset} className="text-xs text-faint hover:text-muted">
-          ← new request
+        <button onClick={restart} className="text-xs text-faint hover:text-muted">
+          ← back to my account
         </button>
       )}
     </div>
+  );
+}
+
+function ShieldIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 2 4 5v6c0 5 3.5 8 8 11 4.5-3 8-6 8-11V5l-8-3Z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
   );
 }
 
