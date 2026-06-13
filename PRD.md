@@ -26,7 +26,7 @@ Do not assume any stage timing beyond what is confirmed on-site. Prepare a 4-min
 ## 1. Winning Thesis
 
 **One sentence:**
-Fiado gives a verified human instant merchant store credit: World ID enforces one credit line per person, an agent explains and orchestrates the decision, Arc settles USDC directly to the merchant, and Ledger is the physical trust gate before funds move.
+Fiado gives a verified human instant merchant store credit: World ID enforces one credit line per person, an agent explains and orchestrates the decision, Arc settles USDC directly to the merchant, and Ledger is the physical trust gate that signs the agent's spending mandate and approves any decision that escapes it.
 
 **The emotional hook:**
 A person without a bank account walks into a corner store, gets what they need, and leaves without cash. The merchant receives USDC immediately. The customer never receives cash, cannot create multiple identities, and builds onchain reputation by repaying.
@@ -35,7 +35,10 @@ A person without a bank account walks into a corner store, gets what they need, 
 This is not a toy payment app. It joins personhood, stablecoin settlement, programmable store credit, and hardware-gated agent actions into one visible flow.
 
 **The line judges should repeat:**
-> "One verified human, one store-credit line. The merchant gets USDC. The agent cannot move funds until a real person approves on Ledger."
+> "One verified human, one store-credit line. The agent disburses USDC to the merchant autonomously inside a hardware-signed mandate — and a real person approves on Ledger the instant it steps outside that mandate."
+
+**Why this scales (do not skip this in the pitch):**
+A human does not approve every 18 USDC purchase — that would never scale. The Ledger owner (the credit treasury operator) signs the agent's **mandate once**: max per transaction, max total outstanding, registered merchants only, time-boxed. Inside that envelope the agent settles instantly with no human in the loop. Ledger returns only as an **exception gate** — large amounts, low agent confidence, new merchants, or anomalies. This is bounded autonomy, hardware-enforced.
 
 ---
 
@@ -61,8 +64,10 @@ This is not a toy payment app. It joins personhood, stablecoin settlement, progr
 ## 3. Judging Strategy
 
 **WOW Factor**
-The decisive moment is physical and legible:
-World ID verified -> store credit approved -> agent requests payout -> Ledger/Speculos prompts approval -> human confirms -> Arc transaction appears -> merchant balance increases.
+Two paths, both legible:
+- Auto path (scale): World ID verified -> agent approves inside mandate -> Arc disburses USDC instantly -> merchant balance increases. No human.
+- Exception path (the physical moment): a high-value or low-confidence request -> agent escalates -> physical Ledger prompts approval -> human confirms -> Arc transaction appears -> merchant paid.
+The decisive on-stage moment is the physical Ledger lighting up exactly when, and only when, it should.
 
 **Practicality**
 This maps to real informal credit. It prevents cash-out fraud by paying the merchant directly and prevents Sybil abuse with one-person-one-credit-line.
@@ -103,20 +108,23 @@ The demo is the product. Build the happy path first, then make it resilient.
 0:00-0:30 - Human problem:
 Informal store tabs are real, trusted, and local, but they do not scale.
 
-0:30-1:00 - Personhood:
+0:30-1:00 - The mandate (sets up the whole demo):
+The treasury operator signs the agent mandate on the physical Ledger once: max per transaction, max total outstanding, registered merchants only, time-boxed. "From here the agent runs on its own — until it has to ask."
+
+1:00-1:30 - Personhood:
 Customer verifies with World ID. The system shows the nullifier is accepted and no active credit line exists.
 
-1:00-2:00 - Store credit decision:
-Agent reads policy inputs: one verified human, merchant, requested amount, prior repayment score, active line status. It recommends a specific store-credit amount. The policy result is deterministic and auditable.
+1:30-2:15 - Auto path (scale):
+Customer requests 18.50 USDC store credit. Agent reads policy inputs, scores high confidence, sees it is inside the mandate, and disburses instantly. No human. Merchant balance increases. "This is the 99% case."
 
-2:00-3:00 - The moment:
-Agent requests merchant payout. Ledger/Speculos displays the approval step. Human confirms. Contract disburses USDC on Arc to the merchant. Show explorer link or local tx panel.
+2:15-3:15 - Exception path (the moment):
+A request for 1,500 USDC (or a low-confidence case) comes in. Agent stops: outside mandate. The physical Ledger lights up. Human inspects and confirms. Only now does the contract disburse on Arc. Show explorer link or local tx panel. "The agent asked for a human exactly when it should have."
 
-3:00-3:30 - Flywheel:
+3:15-3:40 - Flywheel:
 Repayment updates reputation and raises the future credit line.
 
-3:30-4:00 - Why this wins:
-This is financial access without cash-out fraud, without duplicate identities, and without unchecked autonomous payments.
+3:40-4:00 - Why this wins:
+Financial access without cash-out fraud, without duplicate identities, and with autonomy that scales but cannot run unchecked.
 
 ### Backup Demo
 
@@ -228,19 +236,23 @@ Core state:
 - `creditLines[lineId]`
 - `reputation[nullifierHash]`
 - `totalOutstanding`
+- `agentMandate` (maxPerTx, maxTotalOutstanding, expiresAt, agent address, active flag)
 
 Core functions:
 - `registerMerchant(address merchant, string metadataURI)`
+- `setAgentMandate(uint256 maxPerTx, uint256 maxTotalOutstanding, uint256 expiresAt, address agent, bytes ledgerSignature)` — signed once on the physical Ledger; defines the autonomy envelope.
 - `openLine(bytes32 nullifierHash, address customerWallet, uint256 maxAmount, uint256 expiresAt, bytes backendSignature)`
-- `requestDisbursement(bytes32 lineId, address merchant, uint256 amount)`
-- `approveAndDisburse(bytes32 lineId, address merchant, uint256 amount, bytes ledgerApproval)` or equivalent signed approval path
+- `autoDisburse(bytes32 lineId, address merchant, uint256 amount)` — agent-callable; reverts unless the mandate is active, not expired, merchant registered, amount <= maxPerTx, and totalOutstanding + amount <= maxTotalOutstanding. No human signature. This is the 99% path.
+- `approveAndDisburse(bytes32 lineId, address merchant, uint256 amount, bytes ledgerApproval)` — the escalation path for anything outside the mandate; requires a fresh physical Ledger approval signature.
 - `repay(bytes32 lineId, uint256 amount)`
 - `closeLine(bytes32 lineId)`
 
 Events:
 - `HumanVerified`
 - `CreditLineOpened`
-- `DisbursementRequested`
+- `MandateSet`
+- `AutoDisbursed`
+- `EscalationRequired`
 - `DisbursementApproved`
 - `MerchantPaid`
 - `Repaid`
@@ -251,7 +263,8 @@ Security rules:
 - Customer never receives disbursement funds.
 - Only registered merchants can receive payouts.
 - Disbursement cannot exceed line limit.
-- Sensitive disbursement path requires approval.
+- `autoDisburse` is hard-bounded by the mandate; anything beyond maxPerTx or maxTotalOutstanding (or with an expired/inactive mandate) can only move through `approveAndDisburse` with a fresh Ledger signature.
+- The mandate itself can only be set or changed with a Ledger signature.
 - Repayment improves reputation only after actual payment.
 
 ---
@@ -270,26 +283,45 @@ Inputs:
 
 Output:
 - `approvedAmount`
+- `confidence` (0-1, deterministic from input completeness + history)
 - `reasonCodes`
 - `riskLevel`
-- `requiresLedgerApproval`
+- `route` (`AUTO` or `ESCALATE`)
+- `escalationReason` (empty when AUTO)
 - `contractCallPreview`
 
-Policy:
-- Deterministic scoring first.
-- LLM/agent can narrate, explain, and route actions.
-- Never let the LLM invent eligibility or bypass contract checks.
+Routing (deterministic, the agent never improvises this):
+- `AUTO` when: amount <= mandate.maxPerTx AND totalOutstanding + amount <= mandate.maxTotalOutstanding AND merchant registered AND confidence >= threshold AND no anomaly flag.
+- `ESCALATE` otherwise. Escalation reasons: `OVER_TX_CAP`, `OVER_TOTAL_CAP`, `LOW_CONFIDENCE`, `NEW_MERCHANT`, `VELOCITY_ANOMALY`, `MANDATE_EXPIRED`.
 
-Demo log example:
+Policy:
+- Deterministic scoring and routing first. The contract enforces the same bounds, so the LLM cannot widen them.
+- LLM/agent narrates, explains the reason codes, and routes actions.
+- Never let the LLM invent eligibility, raise a cap, or bypass contract checks.
+
+Demo log example - AUTO path (99% case):
 ```
 Verified human: yes
 Active credit line: no
 Merchant registered: yes
 Requested: 18.50 USDC
 Reputation tier: starter
-Policy cap: 25.00 USDC
-Decision: approve 18.50 USDC store credit
-Next step: request Ledger approval for merchant payout
+Confidence: 0.94
+Mandate: maxPerTx 250 / maxTotal 5000 / active
+Decision: approve 18.50 USDC, route AUTO
+Next step: autoDisburse — no human needed
+```
+
+Demo log example - ESCALATE path (the moment):
+```
+Verified human: yes
+Active credit line: no
+Merchant registered: yes
+Requested: 1500.00 USDC
+Confidence: 0.71
+Mandate: maxPerTx 250 / maxTotal 5000 / active
+Decision: route ESCALATE (OVER_TX_CAP)
+Next step: request physical Ledger approval before any payout
 ```
 
 ---
@@ -320,11 +352,11 @@ Do not create a marketing landing page. The first screen must be the product/dem
 
 ## 10. Partner Prize Alignment
 
-Submit exactly these three partner categories unless on-site partner guidance changes:
+DECIDED (June 13): exactly three sponsors — **World, Arc, Ledger**. Only three can be registered, and these are the three load-bearing legs. Chainlink's verifiable-fair-decision angle may be mentioned in the narrative but is NOT registered and NOT built unless everything else is done. Physical Ledger device is on-site, so the hardware approval moment is real, not emulated.
 
 1. **World**
-   - Track A: AgentKit if meaningful Human Backed Agent flow is working.
-   - Track B: World ID is safer and core. Product breaks without proof of human.
+   - Primary: Track B (World ID) — core and load-bearing. Product breaks without proof of human (one person could open many credit lines).
+   - Track A (AgentKit) only as a bonus if a meaningful Human Backed Agent flow already works.
 
 2. **Arc**
    - Primary: Best Smart Contracts on Arc with Advanced Stablecoin Logic.
