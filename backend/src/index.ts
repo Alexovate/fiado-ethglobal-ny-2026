@@ -3,6 +3,9 @@ import { config } from "./config.js";
 import { verifyProof, type WorldProof } from "./world.js";
 import { evaluate, type PolicyInput } from "./policy.js";
 import { signOpenLine, backendSignerAddress } from "./signing.js";
+import * as arc from "./arc.js";
+import { mandateDigest, escalationDigest } from "./digests.js";
+import type { Address, Hex } from "viem";
 import {
   markVerified,
   hasActiveLine,
@@ -101,6 +104,90 @@ app.post("/credit/quote", (req: Request, res: Response) => {
     maxTotalOutstanding: config.mandate.maxTotalOutstanding,
     expiresAt: Math.floor(mandateExpiresAt / 1000),
   } });
+});
+
+// --- Mandate: the human signs once on the Ledger to set the autonomy frame ---
+
+// Returns the inner digest for the Ledger to sign + the on-chain values to submit.
+app.post("/mandate/prepare", async (_req: Request, res: Response) => {
+  try {
+    const agent = arc.agentAddress();
+    const nonce = await arc.mandateNonce();
+    const onchain = {
+      agent,
+      maxPerTx: arc.toOnChain(config.mandate.maxPerTx),
+      maxTotalOutstanding: arc.toOnChain(config.mandate.maxTotalOutstanding),
+      expiresAt: BigInt(Math.floor(Date.now() / 1000) + config.mandate.ttlHours * 3600),
+    };
+    const digest = mandateDigest({ ...onchain, nonce });
+    json(res, { digest, onchain });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
+});
+
+app.post("/mandate/submit", async (req: Request, res: Response) => {
+  try {
+    const { agent, maxPerTx, maxTotalOutstanding, expiresAt, signature } = req.body ?? {};
+    const hash = await arc.setMandate({
+      agent: agent as Address,
+      maxPerTx: BigInt(maxPerTx),
+      maxTotalOutstanding: BigInt(maxTotalOutstanding),
+      expiresAt: BigInt(expiresAt),
+      ledgerSignature: signature as Hex,
+    });
+    json(res, { ok: true, hash });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
+});
+
+// --- AUTO disbursement: agent submits, no human (inside the mandate) ---
+app.post("/credit/disburse", async (req: Request, res: Response) => {
+  try {
+    const { lineId, merchant, displayAmount } = req.body ?? {};
+    const hash = await arc.autoDisburse(
+      lineId as Hex,
+      merchant as Address,
+      arc.toOnChain(BigInt(displayAmount)),
+    );
+    json(res, { ok: true, hash });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
+});
+
+// --- ESCALATION: human signs the payout on the Ledger, then agent submits ---
+app.post("/credit/escalate/prepare", (req: Request, res: Response) => {
+  try {
+    const { lineId, merchant, displayAmount, nonce } = req.body ?? {};
+    const onChainAmount = arc.toOnChain(BigInt(displayAmount));
+    const digest = escalationDigest({
+      lineId: lineId as Hex,
+      merchant: merchant as Address,
+      amount: onChainAmount,
+      nonce: BigInt(nonce),
+    });
+    json(res, { digest, onChainAmount, nonce });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
+});
+
+app.post("/credit/escalate/submit", async (req: Request, res: Response) => {
+  try {
+    const { lineId, merchant, onChainAmount, nonce, signature } = req.body ?? {};
+    const hash = await arc.approveAndDisburse(
+      lineId as Hex,
+      merchant as Address,
+      BigInt(onChainAmount),
+      BigInt(nonce),
+      signature as Hex,
+    );
+    json(res, { ok: true, hash });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
 });
 
 app.listen(config.port, () => {

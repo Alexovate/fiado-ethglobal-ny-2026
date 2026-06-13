@@ -78,6 +78,13 @@ const CREDITLINE_ABI = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "mandateNonce",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "uint256" }],
+  },
 ] as const;
 
 const ERC20_ABI = [
@@ -96,6 +103,11 @@ function agentWallet() {
   if (!config.agentPrivateKey) throw new Error("AGENT_PRIVATE_KEY not set");
   const account = privateKeyToAccount(config.agentPrivateKey as Hex);
   return createWalletClient({ account, chain: arcTestnet, transport: http() });
+}
+
+export function agentAddress(): Address {
+  if (!config.agentPrivateKey) throw new Error("AGENT_PRIVATE_KEY not set");
+  return privateKeyToAccount(config.agentPrivateKey as Hex).address;
 }
 
 function creditLine(): Address {
@@ -127,8 +139,17 @@ export function totalOutstanding(): Promise<bigint> {
   });
 }
 
+export function mandateNonce(): Promise<bigint> {
+  return publicClient.readContract({
+    address: creditLine(),
+    abi: CREDITLINE_ABI,
+    functionName: "mandateNonce",
+  });
+}
+
 // ---- writes (agent relayer) ----
-// Amounts are passed in display base units; scaling to on-chain happens here.
+// All amounts here are ALREADY on-chain units. Scaling display->on-chain happens
+// once, in the orchestration layer (so signed digests and submitted values match).
 
 export function setMandate(params: {
   agent: Address;
@@ -141,29 +162,23 @@ export function setMandate(params: {
     address: creditLine(),
     abi: CREDITLINE_ABI,
     functionName: "setAgentMandate",
-    args: [
-      params.agent,
-      toOnChain(params.maxPerTx),
-      toOnChain(params.maxTotalOutstanding),
-      params.expiresAt,
-      params.ledgerSignature,
-    ],
+    args: [params.agent, params.maxPerTx, params.maxTotalOutstanding, params.expiresAt, params.ledgerSignature],
   });
 }
 
-export function autoDisburse(lineId: Hex, merchant: Address, displayAmount: bigint): Promise<Hex> {
+export function autoDisburse(lineId: Hex, merchant: Address, onChainAmount: bigint): Promise<Hex> {
   return agentWallet().writeContract({
     address: creditLine(),
     abi: CREDITLINE_ABI,
     functionName: "autoDisburse",
-    args: [lineId, merchant, toOnChain(displayAmount)],
+    args: [lineId, merchant, onChainAmount],
   });
 }
 
 export function approveAndDisburse(
   lineId: Hex,
   merchant: Address,
-  displayAmount: bigint,
+  onChainAmount: bigint,
   nonce: bigint,
   ledgerApproval: Hex,
 ): Promise<Hex> {
@@ -171,6 +186,6 @@ export function approveAndDisburse(
     address: creditLine(),
     abi: CREDITLINE_ABI,
     functionName: "approveAndDisburse",
-    args: [lineId, merchant, toOnChain(displayAmount), nonce, ledgerApproval],
+    args: [lineId, merchant, onChainAmount, nonce, ledgerApproval],
   });
 }
