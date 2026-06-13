@@ -9,7 +9,21 @@ export const MANDATE: Mandate = {
   expiresInLabel: "5h 32m",
 };
 
-export const START_BALANCE = 1_284_500_000; // merchant starts at 1,284.50 USDC
+export const START_BALANCE = 1_284_500_000; // merchant starts at 1,284.50 USDC (mock cosmetic)
+
+/** On-chain demo identities for live (Arc) mode. */
+export const CHAIN = {
+  merchant: "0x8acC23a57207D3e919704780bE2e750E560A29A6",
+  lineMaxDisplay: "2000000000", // 2,000 USDC line limit (display units)
+  auto: {
+    nullifier: "0x00000000000000000000000000000000000000000000000000000000000a0701",
+    customer: "0x000000000000000000000000000000000000A070",
+  },
+  escalate: {
+    nullifier: "0x00000000000000000000000000000000000000000000000000000000000e5ca1",
+    customer: "0x000000000000000000000000000000000000E5CA",
+  },
+} as const;
 
 /** AUTO — the 99% case. Inside the mandate, high confidence, no human. */
 export const AUTO: Scenario = {

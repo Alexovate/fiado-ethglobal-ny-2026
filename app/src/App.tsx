@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { AgentTrace } from "./components/AgentTrace";
 import { LedgerModal } from "./components/LedgerModal";
-import { AUTO, ESCALATE, MANDATE, START_BALANCE } from "./lib/scenarios";
+import { AUTO, ESCALATE, MANDATE, START_BALANCE, CHAIN } from "./lib/scenarios";
 import type { Scenario } from "./lib/types";
 import { usdc, pct } from "./lib/format";
+import { connectLedger, signInner, isWebHidAvailable } from "./lib/ledger";
+import { api, EXPLORER } from "./lib/api";
 
 type Phase =
   | "idle"
@@ -73,13 +75,150 @@ export default function App() {
   const runToken = useRef(0);
   const balance = useCountUp(balanceTarget);
 
+  // --- live (Arc) mode ---
+  const [liveMode, setLiveMode] = useState(false);
+  const [mandateActive, setMandateActive] = useState(false);
+  const [tx, setTx] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pendingLine = useRef<`0x${string}` | null>(null);
+
+  const refreshChainBalance = useCallback(async () => {
+    try {
+      const s = await api.state(CHAIN.merchant);
+      setBalanceTarget(Number(s.merchantBalanceDisplay));
+    } catch {
+      /* ignore — display stays as-is */
+    }
+  }, []);
+
+  // Reveal the reasoning trace at demo pace, then resolve.
+  const revealTrace = useCallback(async (s: Scenario, token: number) => {
+    setScenario(s);
+    setRevealed(0);
+    setPhase("verifying");
+    await sleep(900);
+    if (token !== runToken.current) return false;
+    setPhase("reasoning");
+    for (let i = 0; i < s.trace.length; i++) {
+      await sleep(520);
+      if (token !== runToken.current) return false;
+      setRevealed(i + 1);
+    }
+    await sleep(400);
+    return token === runToken.current;
+  }, []);
+
+  const signMandate = useCallback(async () => {
+    if (!isWebHidAvailable()) {
+      setNote("WebHID needs Chrome/Edge. Open this in Chrome with the Ledger connected.");
+      return;
+    }
+    setBusy(true);
+    setNote("Connect your Ledger and confirm the mandate on the device…");
+    try {
+      const prep = await api.mandatePrepare();
+      const session = await connectLedger();
+      const sig = await signInner(session, prep.digest);
+      await session.close();
+      const { hash } = await api.mandateSubmit(prep.onchain, sig);
+      setMandateActive(true);
+      setTx(hash);
+      setNote("Mandate signed on Ledger and set on Arc.");
+    } catch (e) {
+      setNote(`Mandate failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const runLiveAuto = useCallback(async () => {
+    const token = ++runToken.current;
+    setTx(null);
+    setNote(null);
+    setLedgerApproved(false);
+    const ok = await revealTrace(AUTO, token);
+    if (!ok) return;
+    setPhase("decided_auto");
+    setBusy(true);
+    try {
+      const ids = CHAIN.auto;
+      const line = await api.openLine(ids.nullifier, ids.customer, CHAIN.lineMaxDisplay);
+      pendingLine.current = line.lineId;
+      setPhase("disbursing");
+      const { hash } = await api.disburse(line.lineId, CHAIN.merchant, String(AUTO.amount));
+      setTx(hash);
+      await refreshChainBalance();
+      setPhase("paid");
+    } catch (e) {
+      setNote(`Auto disburse failed: ${(e as Error).message}`);
+      setPhase("idle");
+    } finally {
+      setBusy(false);
+    }
+  }, [revealTrace, refreshChainBalance]);
+
+  const runLiveEscalate = useCallback(async () => {
+    const token = ++runToken.current;
+    setTx(null);
+    setNote(null);
+    setLedgerApproved(false);
+    const ok = await revealTrace(ESCALATE, token);
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const ids = CHAIN.escalate;
+      const line = await api.openLine(ids.nullifier, ids.customer, CHAIN.lineMaxDisplay);
+      pendingLine.current = line.lineId;
+      setPhase("ledger"); // modal opens; device confirm happens in confirmLiveEscalate
+    } catch (e) {
+      setNote(`Open line failed: ${(e as Error).message}`);
+      setPhase("idle");
+    } finally {
+      setBusy(false);
+    }
+  }, [revealTrace]);
+
+  const confirmLiveEscalate = useCallback(async () => {
+    if (!isWebHidAvailable()) {
+      setNote("WebHID needs Chrome/Edge with the Ledger connected.");
+      return;
+    }
+    const lineId = pendingLine.current;
+    if (!lineId) return;
+    setBusy(true);
+    setNote("Confirm the payout on your Ledger…");
+    try {
+      const nonce = Math.floor(performance.now());
+      const prep = await api.escalatePrepare(lineId, CHAIN.merchant, String(ESCALATE.amount), nonce);
+      const session = await connectLedger();
+      const sig = await signInner(session, prep.digest);
+      await session.close();
+      const { hash } = await api.escalateSubmit(lineId, CHAIN.merchant, prep.onChainAmount, prep.nonce, sig);
+      setLedgerApproved(true);
+      setTx(hash);
+      setPhase("disbursing");
+      await refreshChainBalance();
+      setPhase("paid");
+      setNote("Human-approved on Ledger, settled on Arc.");
+    } catch (e) {
+      setNote(`Escalation failed: ${(e as Error).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [refreshChainBalance]);
+
   const reset = useCallback(() => {
     runToken.current++;
     setPhase("idle");
     setRevealed(0);
     setLedgerApproved(false);
-    setBalanceTarget(START_BALANCE);
-  }, []);
+    setTx(null);
+    setNote(null);
+    pendingLine.current = null;
+    if (!liveMode) setBalanceTarget(START_BALANCE);
+    else refreshChainBalance();
+  }, [liveMode, refreshChainBalance]);
 
   const play = useCallback(async (s: Scenario) => {
     const token = ++runToken.current;
@@ -242,25 +381,71 @@ export default function App() {
           </Card>
 
           {/* demo controls */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => play(AUTO)}
-              className="rounded-xl bg-teal px-4 py-2.5 text-sm font-bold text-[#003731] transition hover:bg-teal-bright"
-            >
-              ▶ Auto purchase · 18.50
-            </button>
-            <button
-              onClick={() => play(ESCALATE)}
-              className="rounded-xl border border-amber/50 bg-amber-dim px-4 py-2.5 text-sm font-bold text-amber-bright transition hover:border-amber"
-            >
-              ▶ High-value · 1,500 → escalation
-            </button>
-            <button
-              onClick={reset}
-              className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted transition hover:border-border-bright hover:text-ink"
-            >
-              Reset
-            </button>
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => {
+                  reset();
+                  setLiveMode((v) => !v);
+                }}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                  liveMode
+                    ? "border-teal/50 bg-teal-dim text-teal-bright"
+                    : "border-border bg-surface-2 text-muted"
+                }`}
+              >
+                {liveMode ? "● LIVE on Arc" : "○ Mock mode"}
+              </button>
+              {liveMode &&
+                (mandateActive ? (
+                  <span className="text-xs font-medium text-teal">✓ mandate active on Arc</span>
+                ) : (
+                  <button
+                    onClick={signMandate}
+                    disabled={busy}
+                    className="rounded-xl border border-teal/50 bg-teal-dim px-3 py-1.5 text-xs font-bold text-teal-bright transition hover:border-teal disabled:opacity-40"
+                  >
+                    ⎘ Sign mandate on Ledger
+                  </button>
+                ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => (liveMode ? runLiveAuto() : play(AUTO))}
+                disabled={busy || (liveMode && !mandateActive)}
+                className="rounded-xl bg-teal px-4 py-2.5 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
+              >
+                ▶ Auto purchase · 18.50
+              </button>
+              <button
+                onClick={() => (liveMode ? runLiveEscalate() : play(ESCALATE))}
+                disabled={busy}
+                className="rounded-xl border border-amber/50 bg-amber-dim px-4 py-2.5 text-sm font-bold text-amber-bright transition hover:border-amber disabled:opacity-40"
+              >
+                ▶ High-value · 1,500 → escalation
+              </button>
+              <button
+                onClick={reset}
+                className="rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted transition hover:border-border-bright hover:text-ink"
+              >
+                Reset
+              </button>
+            </div>
+            {(note || tx) && (
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                {note && <span className="text-muted">{note}</span>}
+                {tx && (
+                  <a
+                    href={`${EXPLORER}/tx/${tx}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-teal hover:text-teal-bright"
+                  >
+                    ↗ {tx.slice(0, 12)}… on ArcScan
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -326,7 +511,7 @@ export default function App() {
           <LedgerModal
             scenario={scenario}
             status={ledgerApproved ? "approved" : "waiting"}
-            onApprove={approveLedger}
+            onApprove={liveMode ? confirmLiveEscalate : approveLedger}
             onDecline={reset}
           />
         )}

@@ -142,6 +142,54 @@ app.post("/mandate/submit", async (req: Request, res: Response) => {
   }
 });
 
+// --- Open the on-chain credit line (backend signs, relayer submits) ---
+app.post("/credit/open", async (req: Request, res: Response) => {
+  try {
+    const { nullifierHash, customer, displayMaxAmount, expiresAt } = req.body ?? {};
+    const existing = await arc.humanToLine(nullifierHash as Hex);
+    if (existing && existing !== `0x${"0".repeat(64)}`) {
+      return json(res, { ok: true, lineId: existing, reused: true });
+    }
+    const exp = BigInt(expiresAt ?? Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
+    const onChainMax = arc.toOnChain(BigInt(displayMaxAmount ?? 100_000_000));
+    const auth = await signOpenLine({
+      nullifierHash: nullifierHash as Hex,
+      customer: customer as Address,
+      maxAmount: onChainMax,
+      expiresAt: exp,
+    });
+    const hash = await arc.openLine({
+      nullifierHash: nullifierHash as Hex,
+      customer: customer as Address,
+      maxAmount: onChainMax,
+      expiresAt: exp,
+      backendSignature: auth.signature,
+    });
+    await arc.publicClient.waitForTransactionReceipt({ hash });
+    const lineId = await arc.humanToLine(nullifierHash as Hex);
+    json(res, { ok: true, lineId, hash });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
+});
+
+// --- On-chain state for the UI (scaled back to display units) ---
+app.get("/onchain/state", async (req: Request, res: Response) => {
+  try {
+    const merchant = req.query.merchant as string;
+    const [balance, outstanding] = await Promise.all([
+      merchant ? arc.merchantBalance(merchant as Address) : Promise.resolve(0n),
+      arc.totalOutstanding(),
+    ]);
+    json(res, {
+      merchantBalanceDisplay: arc.toDisplay(balance),
+      totalOutstandingDisplay: arc.toDisplay(outstanding),
+    });
+  } catch (e) {
+    json(res, { error: String((e as Error).message) }, 500);
+  }
+});
+
 // --- AUTO disbursement: agent submits, no human (inside the mandate) ---
 app.post("/credit/disburse", async (req: Request, res: Response) => {
   try {

@@ -85,6 +85,13 @@ const CREDITLINE_ABI = [
     inputs: [],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "humanToLine",
+    stateMutability: "view",
+    inputs: [{ name: "nullifierHash", type: "bytes32" }],
+    outputs: [{ type: "bytes32" }],
+  },
 ] as const;
 
 const ERC20_ABI = [
@@ -118,6 +125,20 @@ function creditLine(): Address {
 /** Display USDC base units (6 dec) -> on-chain units, scaled for the testnet faucet. */
 export function toOnChain(displayBaseUnits: bigint): bigint {
   return displayBaseUnits / config.scaleDivisor;
+}
+
+/** On-chain units -> display USDC base units (inverse of toOnChain). */
+export function toDisplay(onChainUnits: bigint): bigint {
+  return onChainUnits * config.scaleDivisor;
+}
+
+export function humanToLine(nullifierHash: Hex): Promise<Hex> {
+  return publicClient.readContract({
+    address: creditLine(),
+    abi: CREDITLINE_ABI,
+    functionName: "humanToLine",
+    args: [nullifierHash],
+  });
 }
 
 // ---- reads ----
@@ -163,6 +184,21 @@ export function setMandate(params: {
     abi: CREDITLINE_ABI,
     functionName: "setAgentMandate",
     args: [params.agent, params.maxPerTx, params.maxTotalOutstanding, params.expiresAt, params.ledgerSignature],
+  });
+}
+
+export function openLine(params: {
+  nullifierHash: Hex;
+  customer: Address;
+  maxAmount: bigint; // on-chain units
+  expiresAt: bigint;
+  backendSignature: Hex;
+}): Promise<Hex> {
+  return agentWallet().writeContract({
+    address: creditLine(),
+    abi: CREDITLINE_ABI,
+    functionName: "openLine",
+    args: [params.nullifierHash, params.customer, params.maxAmount, params.expiresAt, params.backendSignature],
   });
 }
 
