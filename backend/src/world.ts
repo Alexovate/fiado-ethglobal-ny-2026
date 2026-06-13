@@ -27,8 +27,13 @@ export async function verifyProof(
     return { ok: true, nullifierHash: proof.nullifier_hash, mode: "mock" };
   }
 
+  // World ID 4.0 verify endpoint. NOTE: the v4 body is the IDKit-4.0 proof shape
+  // ({ protocol_version, nonce, action, responses: [...] }), not the legacy
+  // nullifier_hash/merkle_root/proof fields below. Wiring IDKit 4.0 to produce
+  // that payload is the remaining World integration; until then DEMO_MOCK_MODE
+  // is the reliable demo path (see README "what is real vs mocked").
   const rpId = config.world.rpId || config.world.appId;
-  const url = `${config.world.apiBase}/api/v2/verify/${rpId}`;
+  const url = `${config.world.apiBase}/api/v4/verify/${rpId}`;
 
   const res = await fetch(url, {
     method: "POST",

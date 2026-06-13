@@ -146,6 +146,10 @@ app.post("/mandate/submit", async (req: Request, res: Response) => {
 app.post("/credit/open", async (req: Request, res: Response) => {
   try {
     const { nullifierHash, customer, displayMaxAmount, expiresAt } = req.body ?? {};
+    // Moat: a line can only be opened for a human who passed World ID /verify.
+    if (!getHuman(nullifierHash)) {
+      return json(res, { error: "human not verified — complete World ID first" }, 403);
+    }
     const existing = await arc.humanToLine(nullifierHash as Hex);
     if (existing && existing !== `0x${"0".repeat(64)}`) {
       return json(res, { ok: true, lineId: existing, reused: true });

@@ -143,6 +143,7 @@ export default function App() {
     setBusy(true);
     try {
       const ids = CHAIN.auto;
+      await api.verify(ids.nullifier); // World ID gate before a line can open
       const line = await api.openLine(ids.nullifier, ids.customer, CHAIN.lineMaxDisplay);
       pendingLine.current = line.lineId;
       setPhase("disbursing");
@@ -168,6 +169,7 @@ export default function App() {
     setBusy(true);
     try {
       const ids = CHAIN.escalate;
+      await api.verify(ids.nullifier); // World ID gate before a line can open
       const line = await api.openLine(ids.nullifier, ids.customer, CHAIN.lineMaxDisplay);
       pendingLine.current = line.lineId;
       setPhase("ledger"); // modal opens; device confirm happens in confirmLiveEscalate

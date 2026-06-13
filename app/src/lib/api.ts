@@ -33,6 +33,13 @@ export interface EscalatePrepare {
 }
 
 export const api = {
+  // World ID proof -> verified human. In DEMO_MOCK_MODE the backend accepts the
+  // proof; with IDKit wired this carries the real proof. Required before openLine.
+  verify: (nullifierHash: string) =>
+    post<{ ok: boolean; nullifierHash: string; mode: string; hasActiveLine: boolean }>("/verify", {
+      proof: { nullifier_hash: nullifierHash, merkle_root: "0x0", proof: "0x0" },
+    }),
+
   state: (merchant: string) =>
     get<{ merchantBalanceDisplay: string; totalOutstandingDisplay: string }>(
       `/onchain/state?merchant=${merchant}`,
