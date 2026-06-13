@@ -97,6 +97,15 @@ async function evaluate(r: CreditRequest): Promise<void> {
     return;
   }
 
+  // Once a HUMAN has stepped in (asked the borrower a question), the case stays
+  // with the human — the agent does not re-decide. The operator reads the answer
+  // and approves/declines on the Ledger. (Answers just bounce back to escalated.)
+  if (r.questions.some((q) => q.askedBy === "human")) {
+    r.route = "ESCALATE";
+    r.status = "escalated";
+    return;
+  }
+
   const amount = BigInt(r.amountDisplay);
   const human = getHuman(r.nullifierHash);
   const outstanding = getOutstanding(r.nullifierHash);
