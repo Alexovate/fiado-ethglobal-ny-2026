@@ -5,10 +5,14 @@
 // public backend URL (e.g. an ngrok https URL).
 const BASE = (import.meta.env.VITE_API_BASE as string | undefined) || "/api";
 
+// `ngrok-skip-browser-warning` keeps the free-tier interstitial from intercepting
+// our API fetches (it would return HTML instead of JSON).
+const NGROK = { "ngrok-skip-browser-warning": "true" };
+
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...NGROK },
     body: JSON.stringify(body),
   });
   const data = await res.json();
@@ -17,7 +21,7 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE}${path}`);
+  const res = await fetch(`${BASE}${path}`, { headers: { ...NGROK } });
   const data = await res.json();
   if (!res.ok || data?.error) throw new Error(data?.error ?? `${path} failed`);
   return data as T;
