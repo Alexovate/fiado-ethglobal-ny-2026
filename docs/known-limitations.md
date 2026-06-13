@@ -25,9 +25,11 @@ demo over last-minute contract churn.
 ## World ID
 
 - The **verify-gate is real**: a line cannot open for an unverified nullifier.
-- The **proof itself** is mocked via `DEMO_MOCK_MODE` for rehearsal reliability.
-  Wiring IDKit 4.0 to carry a live World App proof (and the v4 `responses[]`
-  verify payload) is the remaining integration.
+- The **live World ID 4.0 scan works**: IDKit 4.0 in the mini app → World App →
+  backend verifies via `/api/v4/verify/{rp_id}` (RP-signature signed with the
+  app's signing key). `DEMO_MOCK_MODE` remains as an offline-rehearsal fallback.
+- The live World flow must be served from the **production build** (`vite preview`
+  / a tunnel) — the dev server mis-serves the IDKit WASM.
 
 ## Ledger
 
@@ -45,12 +47,18 @@ on-chain value. The mechanism is identical at 1:1.
 
 ## Anticipated Q&A
 
-- **How do you underwrite someone with no credit score?** Today: deterministic
-  policy over verified-personhood, repayment history, and mandate bounds.
-  Roadmap: conversational/alternative-data intake — the agent asks a few
-  questions and maps answers to *structured features* that feed the deterministic
-  confidence score. The LLM gathers and explains; policy and contract still decide.
+- **How do you underwrite someone with no credit score?** An AI agent (Claude)
+  reads verified personhood, repayment history, the requested amount and purpose,
+  and can ask the borrower one clarifying question — then grants, escalates, or
+  declines. It reasons *inside* hard guardrails (auto-grant under 5 USDC,
+  force-escalate over the limit); the policy and contract enforce the bounds, so
+  the agent can never widen a limit.
+- **What stops a person stacking up loans?** One open loan per verified human
+  until repaid (backend-enforced), plus on-chain caps (one line per nullifier,
+  line maxAmount, mandate per-tx/total). The same person is blocked from new
+  credit until the operator marks the loan repaid.
 - **Is this lending?** No — merchant store credit. The customer never receives
   cash; the merchant is paid directly in USDC.
-- **What stops one person opening many lines?** World ID: one verified human, one
-  active line — enforced on-chain (`humanToLine`) and gated server-side by `/verify`.
+- **Is the AI moving money on its own?** Only within a mandate a human signed on a
+  Ledger (caps, registered merchants, time-boxed). Anything outside it stops for a
+  human to approve on the device.

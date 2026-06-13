@@ -1,6 +1,12 @@
 # Architecture
 
-> Diagram stub. Replace the ASCII with an exported image before submission.
+> A rendered Mermaid diagram lives in the [README](../README.md#architecture).
+> This file keeps the textual reference + the trust split.
+
+The gray-zone underwriting is done by an **AI agent** (the `claude` CLI spawned
+headless on a Max subscription) between the verifier and the contract:
+`≤5 USDC` auto-grant (rule) · gray zone → agent (grant / ask / escalate) ·
+`>limit` → human + Ledger. Credit limit: one open loan per human until repaid.
 
 ```
 +------------------+        +-----------------------------+
