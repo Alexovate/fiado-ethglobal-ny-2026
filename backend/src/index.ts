@@ -4,6 +4,7 @@ import { verifyProof, type WorldProof } from "./world.js";
 import { evaluate, type PolicyInput } from "./policy.js";
 import { signOpenLine, backendSignerAddress } from "./signing.js";
 import * as arc from "./arc.js";
+import * as requests from "./requests.js";
 import { mandateDigest, escalationDigest } from "./digests.js";
 import type { Address, Hex } from "viem";
 import {
@@ -240,6 +241,50 @@ app.post("/credit/escalate/submit", async (req: Request, res: Response) => {
   } catch (e) {
     json(res, { error: String((e as Error).message) }, 500);
   }
+});
+
+// --- Conversational underwriting: the credit-request state machine ---
+
+app.post("/request", (req: Request, res: Response) => {
+  const { nullifierHash, merchant, amountDisplay, purpose } = req.body ?? {};
+  if (!nullifierHash || !merchant || amountDisplay === undefined) {
+    return json(res, { error: "nullifierHash, merchant, amountDisplay required" }, 400);
+  }
+  if (!getHuman(nullifierHash)) {
+    return json(res, { error: "human not verified — complete World ID first" }, 403);
+  }
+  json(res, requests.create({
+    nullifierHash,
+    merchant,
+    amountDisplay: Number(amountDisplay),
+    purpose: purpose ?? "",
+  }));
+});
+
+app.get("/request/:id", (req: Request, res: Response) => {
+  const r = requests.get(String(req.params.id));
+  if (!r) return json(res, { error: "not found" }, 404);
+  json(res, r);
+});
+
+app.post("/request/:id/answer", (req: Request, res: Response) => {
+  const { questionId, answer } = req.body ?? {};
+  if (!questionId) return json(res, { error: "questionId required" }, 400);
+  const r = requests.answer(String(req.params.id), String(questionId), String(answer ?? ""));
+  if (!r) return json(res, { error: "not found" }, 404);
+  json(res, r);
+});
+
+app.post("/request/:id/ask", (req: Request, res: Response) => {
+  const r = requests.ask(String(req.params.id), String(req.body?.text ?? ""));
+  if (!r) return json(res, { error: "not found" }, 404);
+  json(res, r);
+});
+
+app.post("/request/:id/decide", (req: Request, res: Response) => {
+  const r = requests.decide(String(req.params.id), req.body?.decision === "approve" ? "approve" : "decline");
+  if (!r) return json(res, { error: "not found" }, 404);
+  json(res, r);
 });
 
 app.listen(config.port, () => {

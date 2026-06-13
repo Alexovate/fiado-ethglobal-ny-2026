@@ -23,6 +23,7 @@ export interface PolicyInput {
   recentRequestCount: number; // within the velocity window
   velocityMax: number;
   confidenceThreshold: number;
+  intakeAnswered?: boolean; // borrower answered the agent's clarifying question
 }
 
 export interface PolicyResult {
@@ -42,6 +43,7 @@ export function computeConfidence(input: PolicyInput): number {
   let c = 0.95 - 0.04 * ratio;
 
   if (input.reputation > 0n) c += 0.03; // repaid before
+  if (input.intakeAnswered) c += 0.1; // gave a plausible answer to the agent's probe
   if (!input.merchantRegistered) c -= 0.25;
 
   return Math.max(0, Math.min(0.99, Number(c.toFixed(2))));

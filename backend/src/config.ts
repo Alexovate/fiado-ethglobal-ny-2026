@@ -32,6 +32,8 @@ export const config = {
   confidenceThreshold: Number(env("POLICY_CONFIDENCE_THRESHOLD", "0.85")),
   velocityWindowMs: Number(env("POLICY_VELOCITY_WINDOW_MS", "60000")),
   velocityMaxInWindow: Number(env("POLICY_VELOCITY_MAX", "5")),
+  // Above this amount the agent asks the borrower a clarifying question first.
+  questionThresholdDisplay: BigInt(env("POLICY_QUESTION_THRESHOLD", "50")) * 1_000_000n,
 
   // Demo seed mandate (real one is signed on the Ledger; this mirrors it for quotes)
   mandate: {
