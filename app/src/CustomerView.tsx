@@ -190,6 +190,8 @@ export default function CustomerView() {
               rp_context={rpContext}
               allow_legacy_proofs={true}
               preset={orbLegacy({})}
+              // After World App auth on a phone, return to this page in the browser.
+              return_to={typeof window !== "undefined" ? window.location.href : undefined}
               handleVerify={handleVerify}
               onSuccess={() => setOpen(false)}
               onError={(e: unknown) => setErr(`verification error: ${JSON.stringify(e)}`)}
