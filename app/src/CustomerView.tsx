@@ -14,6 +14,8 @@ const ACTION = (import.meta.env.VITE_WORLD_ACTION as string) ?? "fiado-credit-li
 interface Status {
   verified: boolean;
   reputationTier: string;
+  creditLimitDisplay: string;
+  outstandingDisplay: string;
   availableDisplay: string;
   openRequestId: string | null;
   openQuestion: string | null;
@@ -244,14 +246,18 @@ export default function CustomerView() {
               <ShieldIcon />
               <span className="font-semibold">Verified human</span>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-faint">Standing</div>
                 <div className="font-semibold">{status?.reputationTier ?? "—"}</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-faint">Available credit</div>
+                <div className="text-[10px] uppercase tracking-wider text-faint">Available</div>
                 <div className="font-semibold text-teal">{status ? usdc(Number(status.availableDisplay)) : "—"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-faint">Owed</div>
+                <div className="font-semibold">{status ? usdc(Number(status.outstandingDisplay)) : "—"}</div>
               </div>
             </div>
           </div>
@@ -269,6 +275,16 @@ export default function CustomerView() {
               >
                 Answer it now
               </button>
+            </div>
+          ) : Number(status?.availableDisplay ?? "0") <= 0 ? (
+            <div className="flex flex-col gap-2 rounded-2xl border border-amber/40 bg-amber-dim/30 p-5">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-bright">
+                Credit limit reached
+              </div>
+              <p className="text-sm">
+                You owe {status ? usdc(Number(status.outstandingDisplay)) : "—"}. Repay your open balance before
+                requesting more store credit.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">

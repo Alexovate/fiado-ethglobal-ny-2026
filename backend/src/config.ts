@@ -37,6 +37,9 @@ export const config = {
   questionThresholdDisplay: BigInt(env("POLICY_QUESTION_THRESHOLD", "50")) * 1_000_000n,
   // At/under this amount, credit is auto-granted (no agent reasoning needed).
   autoGrantThresholdDisplay: BigInt(env("POLICY_AUTO_GRANT_THRESHOLD", "5")) * 1_000_000n,
+  // Per-borrower credit limit. Available credit = this minus current outstanding;
+  // no new credit once outstanding reaches it, until the loan is repaid.
+  creditLimitDisplay: BigInt(env("POLICY_CREDIT_LIMIT", "250")) * 1_000_000n,
 
   // Demo seed mandate (real one is signed on the Ledger; this mirrors it for quotes)
   mandate: {

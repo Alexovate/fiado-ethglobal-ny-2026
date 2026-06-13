@@ -96,7 +96,25 @@ export default function OperatorDashboard() {
     [refresh],
   );
 
+  const markRepaid = useCallback(
+    async (r: CreditRequest) => {
+      setBusyId(r.id);
+      setNote(null);
+      try {
+        const res = await api.repay(r.nullifierHash);
+        setNote(`Marked repaid — credit freed.${res.hash ? " On-chain repay submitted." : ""}`);
+        await refresh();
+      } catch (e) {
+        setNote(`Repay failed: ${(e as Error).message}`);
+      } finally {
+        setBusyId(null);
+      }
+    },
+    [refresh],
+  );
+
   const pending = rows.filter((r) => r.status === "escalated").length;
+  const granted = (st: string) => st === "auto_approved" || st === "approved" || st === "disbursed";
 
   return (
     <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 px-6 py-6">
@@ -188,6 +206,19 @@ export default function OperatorDashboard() {
                 >
                   ↗ {r.tx.slice(0, 12)}… on ArcScan
                 </a>
+              )}
+
+              {/* mark a granted loan repaid -> frees the borrower's credit */}
+              {granted(r.status) && (
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <button
+                    onClick={() => markRepaid(r)}
+                    disabled={busyId === r.id}
+                    className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-teal/50 hover:text-teal disabled:opacity-40"
+                  >
+                    ✓ Mark repaid
+                  </button>
+                </div>
               )}
 
               {/* operator actions for escalated requests */}

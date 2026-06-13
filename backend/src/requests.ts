@@ -6,7 +6,7 @@
 
 import { config } from "./config.js";
 import { evaluate as policyEvaluate } from "./policy.js";
-import { getHuman, recordRequest } from "./store.js";
+import { getHuman, recordRequest, getOutstanding, addOutstanding } from "./store.js";
 import { decideCredit, type CreditContext } from "./brain.js";
 
 export type ReqStatus =
@@ -99,14 +99,39 @@ async function evaluate(r: CreditRequest): Promise<void> {
 
   const amount = BigInt(r.amountDisplay);
   const human = getHuman(r.nullifierHash);
+  const outstanding = getOutstanding(r.nullifierHash);
 
-  // TIER 1 — tiny amounts auto-granted (one active line per human is on-chain).
-  if (amount <= config.autoGrantThresholdDisplay) {
+  // TIER 0 — one open loan at a time: with any unpaid balance, no new credit
+  // until it's repaid. This is what stops a verified human from stacking up loans.
+  if (outstanding > 0n) {
+    r.route = "ESCALATE";
+    r.status = "declined";
+    r.confidence = 0.3;
+    r.reasonCodes = [
+      `open balance of ${(Number(outstanding) / 1e6).toFixed(2)} USDC — repay it before borrowing again`,
+    ];
+    r.decidedBy = "rule";
+    return;
+  }
+  // Also never exceed the per-borrower credit limit in a single request.
+  if (amount > config.creditLimitDisplay) {
+    r.route = "ESCALATE";
+    r.status = "escalated";
+    r.confidence = 0.5;
+    r.escalationReasons = ["OVER_CREDIT_LIMIT"];
+    r.reasonCodes = ["exceeds credit limit"];
+    r.decidedBy = "rule";
+    return;
+  }
+
+  // TIER 1 — tiny amounts auto-granted, but only with no open balance (once until repaid).
+  if (amount <= config.autoGrantThresholdDisplay && outstanding === 0n) {
     r.route = "AUTO";
     r.status = "auto_approved";
     r.confidence = 0.99;
     r.reasonCodes = ["under auto-grant threshold — instant"];
     r.decidedBy = "rule";
+    addOutstanding(r.nullifierHash, amount);
     return;
   }
   // TIER 3 — over the per-tx cap always needs a human on the Ledger.
@@ -131,7 +156,7 @@ async function evaluate(r: CreditRequest): Promise<void> {
     reputationTier: established ? "Established" : "New borrower",
     tabsRepaid: established ? "8 / 8" : "0 / 0",
     totalRepaidDisplay: Number(human?.reputation ?? 0n),
-    outstandingDisplay: 0,
+    outstandingDisplay: Number(outstanding),
     priorMaxDisplay: established ? 45_000_000 : 0,
     defaultRate: established ? "0%" : "n/a",
     maxPerTxDisplay: Number(config.mandate.maxPerTx),
@@ -153,6 +178,7 @@ async function evaluate(r: CreditRequest): Promise<void> {
   if (d.decision === "grant") {
     r.route = "AUTO";
     r.status = "auto_approved";
+    addOutstanding(r.nullifierHash, amount);
   } else if (d.decision === "decline") {
     r.route = "ESCALATE";
     r.status = "declined";
@@ -248,7 +274,12 @@ export function ask(id: string, text: string): CreditRequest | undefined {
 export function decide(id: string, decision: "approve" | "decline"): CreditRequest | undefined {
   const r = requests.get(id);
   if (!r) return undefined;
-  r.status = decision === "approve" ? "approved" : "declined";
+  if (decision === "approve") {
+    r.status = "approved";
+    addOutstanding(r.nullifierHash, BigInt(r.amountDisplay));
+  } else {
+    r.status = "declined";
+  }
   return r;
 }
 

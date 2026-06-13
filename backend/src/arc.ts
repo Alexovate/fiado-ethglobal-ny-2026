@@ -102,6 +102,29 @@ const ERC20_ABI = [
     inputs: [{ name: "account", type: "address" }],
     outputs: [{ type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "approve",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [{ type: "bool" }],
+  },
+] as const;
+
+const REPAY_ABI = [
+  {
+    type: "function",
+    name: "repay",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "lineId", type: "bytes32" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 export const publicClient = createPublicClient({ chain: arcTestnet, transport: http() });
@@ -223,5 +246,23 @@ export function approveAndDisburse(
     abi: CREDITLINE_ABI,
     functionName: "approveAndDisburse",
     args: [lineId, merchant, onChainAmount, nonce, ledgerApproval],
+  });
+}
+
+/** Repay a line on-chain (relayer funds it): approve USDC, then repay. */
+export async function repay(lineId: Hex, onChainAmount: bigint): Promise<Hex> {
+  const wallet = agentWallet();
+  const approveTx = await wallet.writeContract({
+    address: config.usdcAddress as Address,
+    abi: ERC20_ABI,
+    functionName: "approve",
+    args: [creditLine(), onChainAmount],
+  });
+  await publicClient.waitForTransactionReceipt({ hash: approveTx });
+  return wallet.writeContract({
+    address: creditLine(),
+    abi: REPAY_ABI,
+    functionName: "repay",
+    args: [lineId, onChainAmount],
   });
 }

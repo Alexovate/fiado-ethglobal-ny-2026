@@ -10,9 +10,11 @@ import { signRequest } from "@worldcoin/idkit-server";
 import type { Address, Hex } from "viem";
 import {
   markVerified,
-  hasActiveLine,
+  hasOutstanding,
+  getOutstanding,
   getHuman,
   getTotalOutstanding,
+  settleHuman,
   recordRequest,
 } from "./store.js";
 
@@ -58,13 +60,36 @@ app.get("/customer/status", (req: Request, res: Response) => {
   const human = getHuman(nullifier);
   const open = requests.latestOpenForHuman(nullifier);
   const reputationTier = human && human.reputation > 0n ? "Established" : "New borrower";
+  const outstanding = getOutstanding(nullifier);
+  // One open loan at a time: no available credit while a balance is owed.
+  const available = outstanding > 0n ? 0n : config.creditLimitDisplay;
   json(res, {
     verified: Boolean(human),
     reputationTier,
-    availableDisplay: config.mandate.maxPerTx, // demo: per-tx cap is the available line
+    creditLimitDisplay: config.creditLimitDisplay,
+    outstandingDisplay: outstanding,
+    availableDisplay: available,
     openRequestId: open?.id ?? null,
     openQuestion: open?.questions.find((q) => q.answer === undefined)?.text ?? null,
   });
+});
+
+// Operator marks a borrower's loan repaid: clears the balance (frees credit) and
+// repays on-chain via the relayer so the contract reputation reflects it.
+app.post("/repay", async (req: Request, res: Response) => {
+  const nullifierHash = String(req.body?.nullifierHash ?? "");
+  if (!nullifierHash) return json(res, { error: "nullifierHash required" }, 400);
+  const repaidDisplay = settleHuman(nullifierHash); // immediate off-chain settlement
+  let hash: string | null = null;
+  try {
+    const lineId = await arc.humanToLine(nullifierHash as Hex);
+    if (repaidDisplay > 0n && lineId && lineId !== `0x${"0".repeat(64)}`) {
+      hash = await arc.repay(lineId, arc.toOnChain(repaidDisplay));
+    }
+  } catch {
+    /* on-chain repay is best-effort; the off-chain balance is already cleared */
+  }
+  json(res, { ok: true, repaidDisplay, hash });
 });
 
 // 1) World ID proof -> verified human, one line per human enforced downstream.
@@ -84,7 +109,7 @@ app.post("/verify", async (req: Request, res: Response) => {
     ok: true,
     nullifierHash: result.nullifierHash,
     mode: result.mode,
-    hasActiveLine: hasActiveLine(result.nullifierHash),
+    hasActiveLine: hasOutstanding(result.nullifierHash),
   });
 });
 
@@ -96,7 +121,7 @@ app.post("/credit/authorize", async (req: Request, res: Response) => {
   }
   const human = getHuman(nullifierHash);
   if (!human) return json(res, { error: "human not verified" }, 403);
-  if (hasActiveLine(nullifierHash)) {
+  if (hasOutstanding(nullifierHash)) {
     return json(res, { error: "active credit line already exists for this human" }, 409);
   }
 

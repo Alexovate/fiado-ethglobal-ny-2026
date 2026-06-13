@@ -63,10 +63,15 @@ export const api = {
     get<{
       verified: boolean;
       reputationTier: string;
+      creditLimitDisplay: string;
+      outstandingDisplay: string;
       availableDisplay: string;
       openRequestId: string | null;
       openQuestion: string | null;
     }>(`/customer/status?nullifier=${nullifier}`),
+
+  repay: (nullifierHash: string) =>
+    post<{ ok: boolean; repaidDisplay: string; hash: string | null }>("/repay", { nullifierHash }),
 
   state: (merchant: string) =>
     get<{ merchantBalanceDisplay: string; totalOutstandingDisplay: string }>(
