@@ -221,7 +221,10 @@ export default function CustomerView() {
               rp_context={rpContext}
               allow_legacy_proofs={true}
               preset={orbLegacy({})}
-              return_to={typeof window !== "undefined" ? window.location.href : undefined}
+              // return_to caused an iOS reload loop (page reloads on return -> the
+              // IDKit polling session is lost). Omitting it keeps the page alive;
+              // the user swipes back to Safari and polling completes. Bulletproof
+              // demo path: laptop + phone-QR-scan (the laptop page stays open).
               handleVerify={onVerified}
               onSuccess={() => setOpen(false)}
               onError={(e: unknown) => setErr(`verification error: ${JSON.stringify(e)}`)}

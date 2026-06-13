@@ -51,3 +51,6 @@ fiado-*.png
 
 # project MCP config holds an API key — keep local
 .mcp.json
+
+# local dev launcher (infra, not product)
+run.sh
