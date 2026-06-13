@@ -76,4 +76,35 @@ export const api = {
     }),
 };
 
+export interface Question {
+  id: string;
+  text: string;
+  askedBy: "agent" | "human";
+  answer?: string;
+}
+
+export interface CreditRequest {
+  id: string;
+  nullifierHash: string;
+  merchant: string;
+  amountDisplay: number;
+  purpose: string;
+  status: "need_info" | "auto_approved" | "escalated" | "approved" | "declined" | "disbursed";
+  route: "AUTO" | "ESCALATE" | "NEED_INFO";
+  confidence: number;
+  reasonCodes: string[];
+  escalationReasons: string[];
+  questions: Question[];
+  lineId?: string;
+  tx?: string;
+}
+
+export const requests = {
+  create: (nullifierHash: string, merchant: string, amountDisplay: number, purpose: string) =>
+    post<CreditRequest>("/request", { nullifierHash, merchant, amountDisplay, purpose }),
+  get: (id: string) => get<CreditRequest>(`/request/${id}`),
+  answer: (id: string, questionId: string, answer: string) =>
+    post<CreditRequest>(`/request/${id}/answer`, { questionId, answer }),
+};
+
 export const EXPLORER = "https://testnet.arcscan.app";

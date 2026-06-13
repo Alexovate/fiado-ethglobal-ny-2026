@@ -1,0 +1,221 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, requests, EXPLORER, type CreditRequest } from "./lib/api";
+import { CHAIN } from "./lib/scenarios";
+import { usdc, pct } from "./lib/format";
+
+// Customer-facing surface (the World Mini App view). The borrower asks for store
+// credit; the agent may ask a clarifying question; large/uncertain requests are
+// handed to a human reviewer. Phone-shaped on purpose.
+
+const NULLIFIER = CHAIN.auto.nullifier; // in a real mini app this comes from the World ID proof
+
+export default function CustomerView() {
+  const [amount, setAmount] = useState("80");
+  const [purpose, setPurpose] = useState("");
+  const [req, setReq] = useState<CreditRequest | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [answerText, setAnswerText] = useState("");
+  const [tx, setTx] = useState<string | null>(null);
+  const poll = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPoll = () => {
+    if (poll.current) clearInterval(poll.current);
+    poll.current = null;
+  };
+  useEffect(() => stopPoll, []);
+
+  const submit = useCallback(async () => {
+    setErr(null);
+    setTx(null);
+    setBusy(true);
+    try {
+      const base = Math.round(parseFloat(amount || "0") * 1_000_000);
+      await api.verify(NULLIFIER); // World ID gate
+      const r = await requests.create(NULLIFIER, CHAIN.merchant, base, purpose);
+      setReq(r);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }, [amount, purpose]);
+
+  const sendAnswer = useCallback(
+    async (questionId: string) => {
+      if (!req) return;
+      setBusy(true);
+      try {
+        const r = await requests.answer(req.id, questionId, answerText);
+        setReq(r);
+        setAnswerText("");
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [req, answerText],
+  );
+
+  // AUTO -> settle on-chain (best effort); ESCALATE -> poll for the reviewer's call.
+  useEffect(() => {
+    if (!req) return;
+    if (req.status === "auto_approved" && !tx) {
+      (async () => {
+        try {
+          const line = await api.openLine(NULLIFIER, CHAIN.auto.customer, CHAIN.lineMaxDisplay);
+          const { hash } = await api.disburse(line.lineId, CHAIN.merchant, String(req.amountDisplay));
+          setTx(hash);
+        } catch {
+          /* mandate may be inactive in mock; the decision still stands */
+        }
+      })();
+    }
+    if (req.status === "escalated" || (req.status === "need_info" && req.questions.some((q) => q.askedBy === "human"))) {
+      stopPoll();
+      poll.current = setInterval(async () => {
+        try {
+          const r = await requests.get(req.id);
+          setReq(r);
+          if (["approved", "declined", "disbursed", "auto_approved"].includes(r.status)) stopPoll();
+        } catch {
+          /* ignore */
+        }
+      }, 2000);
+    }
+    return stopPoll;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [req?.status, req?.id]);
+
+  const openQ = req?.questions.find((q) => q.answer === undefined);
+
+  return (
+    <div className="mx-auto flex min-h-full max-w-sm flex-col gap-4 px-5 py-6">
+      <header className="flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal text-base font-black text-[#003731]">
+          F
+        </div>
+        <div>
+          <div className="font-bold leading-none">Fiado</div>
+          <div className="text-[11px] text-faint">Doña Rosa Corner Store</div>
+        </div>
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-teal/40 bg-teal-dim px-2.5 py-1 text-[11px] text-teal-bright">
+          <span className="h-1.5 w-1.5 rounded-full bg-teal" /> World ID
+        </span>
+      </header>
+
+      {/* request form */}
+      {!req && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Buy now, pay later</div>
+          <label className="text-xs text-muted">Amount (USDC)</label>
+          <input
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            inputMode="decimal"
+            className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-2xl font-bold outline-none focus:border-teal"
+          />
+          <label className="text-xs text-muted">What's it for? (optional)</label>
+          <input
+            value={purpose}
+            onChange={(e) => setPurpose(e.target.value)}
+            placeholder="e.g. groceries"
+            className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm outline-none focus:border-teal"
+          />
+          <button
+            onClick={submit}
+            disabled={busy}
+            className="mt-1 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
+          >
+            {busy ? "Checking…" : "Request store credit"}
+          </button>
+        </div>
+      )}
+
+      {/* agent question */}
+      {req && openQ && (
+        <div className="flex flex-col gap-3 rounded-2xl border border-teal/30 bg-teal-dim/30 p-5">
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-teal">
+            {openQ.askedBy === "agent" ? "Agent has a question" : "Reviewer has a question"}
+          </div>
+          <p className="text-sm">{openQ.text}</p>
+          <input
+            value={answerText}
+            onChange={(e) => setAnswerText(e.target.value)}
+            placeholder="Type your answer…"
+            className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm outline-none focus:border-teal"
+          />
+          <button
+            onClick={() => sendAnswer(openQ.id)}
+            disabled={busy || !answerText.trim()}
+            className="rounded-xl bg-teal px-4 py-2.5 text-sm font-bold text-[#003731] disabled:opacity-40"
+          >
+            Send answer
+          </button>
+        </div>
+      )}
+
+      {/* outcomes */}
+      {req && !openQ && (req.status === "auto_approved" || req.status === "disbursed") && (
+        <Outcome
+          tone="teal"
+          title="Approved"
+          body={`${usdc(req.amountDisplay)} store credit at Doña Rosa. The merchant is paid directly — you pay it back later.`}
+          confidence={req.confidence}
+          tx={tx}
+        />
+      )}
+      {req && !openQ && req.status === "approved" && (
+        <Outcome tone="teal" title="Approved by reviewer" body="A person reviewed and approved your request." confidence={req.confidence} tx={tx} />
+      )}
+      {req && req.status === "escalated" && (
+        <Outcome
+          tone="amber"
+          title="A person is reviewing"
+          body="This one needs a human. A reviewer is looking at your request now — hang tight."
+          confidence={req.confidence}
+        />
+      )}
+      {req && req.status === "declined" && (
+        <Outcome tone="amber" title="Not approved" body="This request wasn't approved. You can try a smaller amount." confidence={req.confidence} />
+      )}
+
+      {err && <div className="rounded-xl border border-red/40 bg-red/10 p-3 text-xs text-red">{err}</div>}
+
+      {req && (
+        <button onClick={() => { setReq(null); setTx(null); stopPoll(); }} className="text-xs text-faint hover:text-muted">
+          ← new request
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Outcome({
+  tone,
+  title,
+  body,
+  confidence,
+  tx,
+}: {
+  tone: "teal" | "amber";
+  title: string;
+  body: string;
+  confidence: number;
+  tx?: string | null;
+}) {
+  const c = tone === "teal" ? "border-teal/40 bg-teal-dim/40 text-teal" : "border-amber/40 bg-amber-dim/40 text-amber-bright";
+  return (
+    <div className={`flex flex-col gap-2 rounded-2xl border p-5 ${c}`}>
+      <div className="text-lg font-extrabold tracking-tight">{title}</div>
+      <p className="text-sm text-ink/90">{body}</p>
+      <div className="text-[11px] text-muted">agent confidence {pct(confidence)}</div>
+      {tx && (
+        <a href={`${EXPLORER}/tx/${tx}`} target="_blank" rel="noreferrer" className="font-mono text-xs text-teal hover:text-teal-bright">
+          ↗ {tx.slice(0, 12)}… on ArcScan
+        </a>
+      )}
+    </div>
+  );
+}
