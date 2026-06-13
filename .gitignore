@@ -38,3 +38,7 @@ pnpm-debug.log*
 .idea/
 .vscode/
 *.swp
+
+# working infrastructure — our brain / scratch, never part of the product
+BRAIN.md
+.brain/

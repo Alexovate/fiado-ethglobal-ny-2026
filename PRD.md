@@ -306,7 +306,7 @@ Active credit line: no
 Merchant registered: yes
 Requested: 18.50 USDC
 Reputation tier: starter
-Confidence: 0.94
+Confidence: 0.95
 Mandate: maxPerTx 250 / maxTotal 5000 / active
 Decision: approve 18.50 USDC, route AUTO
 Next step: autoDisburse — no human needed
