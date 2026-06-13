@@ -78,8 +78,10 @@ app.get("/customer/status", (req: Request, res: Response) => {
 // repays on-chain via the relayer so the contract reputation reflects it.
 app.post("/repay", async (req: Request, res: Response) => {
   const nullifierHash = String(req.body?.nullifierHash ?? "");
+  const requestId = req.body?.requestId ? String(req.body.requestId) : null;
   if (!nullifierHash) return json(res, { error: "nullifierHash required" }, 400);
   const repaidDisplay = settleHuman(nullifierHash); // immediate off-chain settlement
+  if (requestId) requests.markRepaid(requestId); // flip the card to "repaid" right away
   let hash: string | null = null;
   try {
     const lineId = await arc.humanToLine(nullifierHash as Hex);

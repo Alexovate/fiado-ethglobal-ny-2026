@@ -15,7 +15,8 @@ export type ReqStatus =
   | "escalated" // needs a human (operator) decision on the Ledger
   | "approved" // human approved — ready to disburse via escalation path
   | "declined"
-  | "disbursed";
+  | "disbursed"
+  | "repaid"; // loan paid back — credit freed
 
 export interface Question {
   id: string;
@@ -298,4 +299,9 @@ export function markDisbursed(id: string, lineId: string, tx: string): void {
   r.lineId = lineId;
   r.tx = tx;
   r.status = "disbursed";
+}
+
+export function markRepaid(id: string): void {
+  const r = requests.get(id);
+  if (r) r.status = "repaid";
 }

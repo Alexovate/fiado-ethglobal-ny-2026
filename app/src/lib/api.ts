@@ -70,8 +70,11 @@ export const api = {
       openQuestion: string | null;
     }>(`/customer/status?nullifier=${nullifier}`),
 
-  repay: (nullifierHash: string) =>
-    post<{ ok: boolean; repaidDisplay: string; hash: string | null }>("/repay", { nullifierHash }),
+  repay: (nullifierHash: string, requestId?: string) =>
+    post<{ ok: boolean; repaidDisplay: string; hash: string | null }>("/repay", {
+      nullifierHash,
+      requestId,
+    }),
 
   state: (merchant: string) =>
     get<{ merchantBalanceDisplay: string; totalOutstandingDisplay: string }>(

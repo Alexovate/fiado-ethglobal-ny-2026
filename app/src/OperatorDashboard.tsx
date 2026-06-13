@@ -12,6 +12,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   auto_approved: { label: "approved", cls: "border-teal/40 bg-teal-dim text-teal" },
   disbursed: { label: "disbursed", cls: "border-teal/40 bg-teal-dim text-teal" },
   approved: { label: "approved", cls: "border-teal/40 bg-teal-dim text-teal" },
+  repaid: { label: "✓ repaid", cls: "border-teal/60 bg-teal text-[#003731]" },
   need_info: { label: "awaiting answer", cls: "border-tertiary/40 bg-surface-3 text-tertiary" },
   escalated: { label: "needs human", cls: "border-amber/40 bg-amber-dim text-amber-bright" },
   declined: { label: "declined", cls: "border-red/40 bg-red/10 text-red" },
@@ -101,7 +102,7 @@ export default function OperatorDashboard() {
       setBusyId(r.id);
       setNote(null);
       try {
-        const res = await api.repay(r.nullifierHash);
+        const res = await api.repay(r.nullifierHash, r.id);
         setNote(`Marked repaid — credit freed.${res.hash ? " On-chain repay submitted." : ""}`);
         await refresh();
       } catch (e) {
@@ -216,7 +217,7 @@ export default function OperatorDashboard() {
                     disabled={busyId === r.id}
                     className="rounded-lg border border-border px-3 py-1.5 text-xs text-muted hover:border-teal/50 hover:text-teal disabled:opacity-40"
                   >
-                    ✓ Mark repaid
+                    {busyId === r.id ? "Repaying…" : "✓ Mark repaid"}
                   </button>
                 </div>
               )}
