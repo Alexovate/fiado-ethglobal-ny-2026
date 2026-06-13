@@ -1,7 +1,9 @@
 // Thin client for the Fiado backend. Vite proxies /api -> http://localhost:3001.
 // Amounts cross the wire as decimal strings (bigint-safe); callers convert.
 
-const BASE = "/api";
+// Dev: Vite proxies /api -> backend. Prod (Vercel): set VITE_API_BASE to the
+// public backend URL (e.g. an ngrok https URL).
+const BASE = (import.meta.env.VITE_API_BASE as string | undefined) || "/api";
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -33,11 +35,21 @@ export interface EscalatePrepare {
 }
 
 export const api = {
-  // World ID proof -> verified human. In DEMO_MOCK_MODE the backend accepts the
-  // proof; with IDKit wired this carries the real proof. Required before openLine.
+  // Mock verify (PC rehearsal): backend accepts in DEMO_MOCK_MODE.
   verify: (nullifierHash: string) =>
     post<{ ok: boolean; nullifierHash: string; mode: string; hasActiveLine: boolean }>("/verify", {
       proof: { nullifier_hash: nullifierHash, merkle_root: "0x0", proof: "0x0" },
+    }),
+
+  // Real IDKit proof -> backend cloud-verifies via World (/api/v2/verify/{app_id}).
+  verifyProof: (proof: {
+    nullifier_hash: string;
+    merkle_root: string;
+    proof: string;
+    verification_level?: string;
+  }) =>
+    post<{ ok: boolean; nullifierHash: string; mode: string; hasActiveLine: boolean }>("/verify", {
+      proof,
     }),
 
   state: (merchant: string) =>

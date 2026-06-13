@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { IDKitWidget, VerificationLevel, type ISuccessResult } from "@worldcoin/idkit";
 import { api, requests, EXPLORER, type CreditRequest } from "./lib/api";
 import { CHAIN } from "./lib/scenarios";
 import { usdc, pct } from "./lib/format";
 
-// Customer-facing surface (the World Mini App view). The borrower asks for store
-// credit; the agent may ask a clarifying question; large/uncertain requests are
-// handed to a human reviewer. Phone-shaped on purpose.
+// Customer-facing surface for an EXTERNAL World ID app (IDKit). The borrower asks
+// for store credit; verifies personhood via World ID (QR on desktop / deeplink on
+// phone); the agent may ask a clarifying question; large/uncertain requests go to
+// a human reviewer. Phone-shaped on purpose. Hosted on Vercel for the live demo.
 
-const NULLIFIER = CHAIN.auto.nullifier; // in a real mini app this comes from the World ID proof
+const APP_ID = (import.meta.env.VITE_WORLD_APP_ID as `app_${string}`) ?? "app_staging";
+const ACTION = (import.meta.env.VITE_WORLD_ACTION as string) ?? "fiado-credit-line";
 
 export default function CustomerView() {
   const [amount, setAmount] = useState("80");
   const [purpose, setPurpose] = useState("");
+  const [nullifier, setNullifier] = useState<string | null>(null);
   const [req, setReq] = useState<CreditRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -25,21 +29,51 @@ export default function CustomerView() {
   };
   useEffect(() => stopPoll, []);
 
-  const submit = useCallback(async () => {
+  const startRequest = useCallback(
+    async (nullifierHash: string) => {
+      const base = Math.round(parseFloat(amount || "0") * 1_000_000);
+      const r = await requests.create(nullifierHash, CHAIN.merchant, base, purpose);
+      setNullifier(nullifierHash);
+      setReq(r);
+    },
+    [amount, purpose],
+  );
+
+  // Real World ID proof (IDKit) -> backend cloud-verify -> start the request.
+  const onVerified = useCallback(
+    async (p: ISuccessResult) => {
+      setErr(null);
+      setBusy(true);
+      try {
+        await api.verifyProof({
+          nullifier_hash: p.nullifier_hash,
+          merkle_root: p.merkle_root,
+          proof: p.proof,
+          verification_level: p.verification_level,
+        });
+        await startRequest(p.nullifier_hash);
+      } catch (e) {
+        setErr((e as Error).message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [startRequest],
+  );
+
+  // Offline rehearsal: skip the scan, use a demo nullifier (backend mock-accepts).
+  const demoSkip = useCallback(async () => {
     setErr(null);
-    setTx(null);
     setBusy(true);
     try {
-      const base = Math.round(parseFloat(amount || "0") * 1_000_000);
-      await api.verify(NULLIFIER); // World ID gate
-      const r = await requests.create(NULLIFIER, CHAIN.merchant, base, purpose);
-      setReq(r);
+      await api.verify(CHAIN.auto.nullifier);
+      await startRequest(CHAIN.auto.nullifier);
     } catch (e) {
       setErr((e as Error).message);
     } finally {
       setBusy(false);
     }
-  }, [amount, purpose]);
+  }, [startRequest]);
 
   const sendAnswer = useCallback(
     async (questionId: string) => {
@@ -60,11 +94,11 @@ export default function CustomerView() {
 
   // AUTO -> settle on-chain (best effort); ESCALATE -> poll for the reviewer's call.
   useEffect(() => {
-    if (!req) return;
+    if (!req || !nullifier) return;
     if (req.status === "auto_approved" && !tx) {
       (async () => {
         try {
-          const line = await api.openLine(NULLIFIER, CHAIN.auto.customer, CHAIN.lineMaxDisplay);
+          const line = await api.openLine(nullifier, CHAIN.auto.customer, CHAIN.lineMaxDisplay);
           const { hash } = await api.disburse(line.lineId, CHAIN.merchant, String(req.amountDisplay));
           setTx(hash);
         } catch {
@@ -86,9 +120,15 @@ export default function CustomerView() {
     }
     return stopPoll;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [req?.status, req?.id]);
+  }, [req?.status, req?.id, nullifier]);
 
   const openQ = req?.questions.find((q) => q.answer === undefined);
+  const reset = () => {
+    setReq(null);
+    setNullifier(null);
+    setTx(null);
+    stopPoll();
+  };
 
   return (
     <div className="mx-auto flex min-h-full max-w-sm flex-col gap-4 px-5 py-6">
@@ -100,15 +140,14 @@ export default function CustomerView() {
           <div className="font-bold leading-none">Fiado</div>
           <div className="text-[11px] text-faint">Doña Rosa Corner Store</div>
         </div>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-teal/40 bg-teal-dim px-2.5 py-1 text-[11px] text-teal-bright">
-          <span className="h-1.5 w-1.5 rounded-full bg-teal" /> World ID
+        <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-surface-2 px-2.5 py-1 text-[11px] text-muted">
+          buy now, pay later
         </span>
       </header>
 
-      {/* request form */}
+      {/* request form + World ID verify */}
       {!req && (
         <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Buy now, pay later</div>
           <label className="text-xs text-muted">Amount (USDC)</label>
           <input
             value={amount}
@@ -123,20 +162,33 @@ export default function CustomerView() {
             placeholder="e.g. groceries"
             className="rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm outline-none focus:border-teal"
           />
-          <button
-            onClick={submit}
-            disabled={busy}
-            className="mt-1 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
+
+          <IDKitWidget
+            app_id={APP_ID}
+            action={ACTION}
+            verification_level={VerificationLevel.Device}
+            onSuccess={onVerified}
           >
-            {busy ? "Checking…" : "Request store credit"}
+            {({ open }) => (
+              <button
+                onClick={open}
+                disabled={busy}
+                className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-teal px-4 py-3 text-sm font-bold text-[#003731] transition hover:bg-teal-bright disabled:opacity-40"
+              >
+                {busy ? "Verifying…" : "Verify with World ID & request"}
+              </button>
+            )}
+          </IDKitWidget>
+          <button onClick={demoSkip} disabled={busy} className="text-center text-[11px] text-faint hover:text-muted">
+            Demo (skip World ID scan)
           </button>
         </div>
       )}
 
-      {/* agent question */}
+      {/* agent / reviewer question */}
       {req && openQ && (
         <div className="flex flex-col gap-3 rounded-2xl border border-teal/30 bg-teal-dim/30 p-5">
-          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-teal">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-teal">
             {openQ.askedBy === "agent" ? "Agent has a question" : "Reviewer has a question"}
           </div>
           <p className="text-sm">{openQ.text}</p>
@@ -184,7 +236,7 @@ export default function CustomerView() {
       {err && <div className="rounded-xl border border-red/40 bg-red/10 p-3 text-xs text-red">{err}</div>}
 
       {req && (
-        <button onClick={() => { setReq(null); setTx(null); stopPoll(); }} className="text-xs text-faint hover:text-muted">
+        <button onClick={reset} className="text-xs text-faint hover:text-muted">
           ← new request
         </button>
       )}
