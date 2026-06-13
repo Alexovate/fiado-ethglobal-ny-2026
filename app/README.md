@@ -29,7 +29,14 @@ npm run build      # type-check + production build
 npm run typecheck
 ```
 
-Currently mock-driven (self-contained, offline-rehearsal-safe). Phase 4 wires
-the buttons to the real backend (`/credit/quote`, `/verify`), the Arc contract,
-and the physical Ledger signature. The mock decision shapes already match the
-backend's AUTO/ESCALATE response.
+Two modes via the toggle:
+
+- **Mock** — self-contained, offline-rehearsal-safe (no backend/chain needed).
+- **Live (Arc)** — wired to the backend (`/api` proxy). Sign the mandate on the
+  physical Ledger (WebHID) → `setAgentMandate`; AUTO runs `openLine` +
+  `autoDisburse`; ESCALATE opens a line and the human confirms the payout on the
+  device → `approveAndDisburse`. Merchant balance and tx links come from Arc.
+  Verified end-to-end on Arc testnet.
+
+Note: live mode currently uses fixed demo nullifiers; wiring IDKit so the
+nullifier comes from a real World ID proof is the remaining World integration.

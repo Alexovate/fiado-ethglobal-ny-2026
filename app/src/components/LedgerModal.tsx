@@ -115,7 +115,7 @@ export function LedgerModal({
             <p className="mx-auto mt-1 max-w-[16rem] text-xs text-muted">
               {status === "approved"
                 ? "Hardware signature captured. Settling on Arc…"
-                : "The device shows the exact payout. The agent cannot move these funds until a real person confirms."}
+                : "Your Ledger shows the signing request to authorize this payout. The agent cannot move funds until you physically confirm."}
             </p>
           </div>
 

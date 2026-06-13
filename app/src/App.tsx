@@ -476,7 +476,9 @@ export default function App() {
             <div className="mt-3 space-y-2 font-mono text-xs">
               <div className="flex items-center justify-between">
                 <span className="text-faint">tx</span>
-                <span className="text-ink">{paid || disbursing ? "0xa71f…9c4d" : "—"}</span>
+                <span className="text-ink">
+                  {tx ? `${tx.slice(0, 10)}…${tx.slice(-4)}` : disbursing || paid ? "(simulated)" : "—"}
+                </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-faint">status</span>
@@ -485,9 +487,18 @@ export default function App() {
                 </span>
               </div>
               <div className="pt-1">
-                <span className={`${paid || disbursing ? "text-teal" : "text-faint"}`}>
-                  ↗ View on ArcScan
-                </span>
+                {tx ? (
+                  <a
+                    href={`${EXPLORER}/tx/${tx}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-teal hover:text-teal-bright"
+                  >
+                    ↗ View on ArcScan
+                  </a>
+                ) : (
+                  <span className="text-faint">↗ ArcScan (live mode only)</span>
+                )}
               </div>
             </div>
           </Card>
