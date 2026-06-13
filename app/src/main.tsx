@@ -7,10 +7,10 @@ import OperatorDashboard from "./OperatorDashboard";
 
 // Routes by hash:
 //   #customer -> World ID customer surface (the mini app)
-//   #ops      -> live operator dashboard (polls the backend, agent activity)
-//   default   -> scripted judge mission control
+//   #demo     -> scripted mission-control (backup narrative, rich Ledger modal)
+//   default   -> live operator dashboard (polls the backend, agent activity)
 const route = window.location.hash.replace("#", "");
-const view = route === "customer" ? <CustomerView /> : route === "ops" ? <OperatorDashboard /> : <App />;
+const view = route === "customer" ? <CustomerView /> : route === "demo" ? <App /> : <OperatorDashboard />;
 
 createRoot(document.getElementById("root")!).render(<StrictMode>{view}</StrictMode>);
 
