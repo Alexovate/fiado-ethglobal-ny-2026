@@ -39,19 +39,15 @@ export default function CustomerView() {
     [amount, purpose],
   );
 
-  // Real World ID proof (IDKit) -> backend cloud-verify -> start the request.
+  // Real World ID 4.0 proof (IDKit) -> backend forwards as-is to v4 verify ->
+  // start the request with the nullifier the backend extracted from the proof.
   const onVerified = useCallback(
     async (p: ISuccessResult) => {
       setErr(null);
       setBusy(true);
       try {
-        await api.verifyProof({
-          nullifier_hash: p.nullifier_hash,
-          merkle_root: p.merkle_root,
-          proof: p.proof,
-          verification_level: p.verification_level,
-        });
-        await startRequest(p.nullifier_hash);
+        const { nullifierHash } = await api.verifyProof(p);
+        await startRequest(nullifierHash);
       } catch (e) {
         setErr((e as Error).message);
       } finally {

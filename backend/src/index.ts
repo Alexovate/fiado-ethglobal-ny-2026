@@ -35,9 +35,13 @@ app.get("/health", (_req, res) => {
 // 1) World ID proof -> verified human, one line per human enforced downstream.
 app.post("/verify", async (req: Request, res: Response) => {
   const proof = req.body?.proof as WorldProof | undefined;
-  if (!proof?.nullifier_hash) return json(res, { error: "missing proof" }, 400);
+  if (!proof || typeof proof !== "object") return json(res, { error: "missing proof" }, 400);
 
   const result = await verifyProof(proof, req.body?.signal);
+  console.log(
+    `[verify] mode=${result.mode} ok=${result.ok} nullifier=${result.nullifierHash?.slice(0, 14)}…` +
+      (result.detail ? ` detail=${result.detail}` : ""),
+  );
   if (!result.ok) return json(res, { ...result }, 401);
 
   markVerified(result.nullifierHash);

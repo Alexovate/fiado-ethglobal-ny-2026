@@ -41,13 +41,8 @@ export const api = {
       proof: { nullifier_hash: nullifierHash, merkle_root: "0x0", proof: "0x0" },
     }),
 
-  // Real IDKit proof -> backend cloud-verifies via World (/api/v2/verify/{app_id}).
-  verifyProof: (proof: {
-    nullifier_hash: string;
-    merkle_root: string;
-    proof: string;
-    verification_level?: string;
-  }) =>
+  // Real IDKit 4.0 result -> backend forwards it as-is to /api/v4/verify/{rp_id}.
+  verifyProof: (proof: unknown) =>
     post<{ ok: boolean; nullifierHash: string; mode: string; hasActiveLine: boolean }>("/verify", {
       proof,
     }),

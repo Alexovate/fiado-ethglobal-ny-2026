@@ -47,3 +47,6 @@ BRAIN.md
 .playwright-mcp/
 fiado-*.png
 *.tsbuildinfo
+
+# project MCP config holds an API key — keep local
+.mcp.json
