@@ -85,10 +85,25 @@ export default function OperatorDashboard() {
         const nonce = Math.floor(performance.now());
         const prep = await api.escalatePrepare(line.lineId, r.merchant, String(r.amountDisplay), nonce);
         const session = await connectLedger();
-        const sig = await signInner(session, prep.digest);
-        await session.close();
-        const { hash } = await api.escalateSubmit(line.lineId, r.merchant, prep.onChainAmount, prep.nonce, sig);
-        await reqApi.disbursed(r.id, line.lineId, hash);
+        let sig: `0x${string}` | null = null;
+        try {
+          sig = await signInner(session, prep.digest);
+        } finally {
+          void session.close().catch(() => undefined);
+        }
+        if (!sig) throw new Error("Ledger signature missing");
+
+        setNote("Ledger signature captured. Settling on Arc…");
+        const { hash, request } = await api.escalateSubmit(
+          line.lineId,
+          r.merchant,
+          prep.onChainAmount,
+          prep.nonce,
+          sig,
+          r.id,
+        );
+        const updated = request ?? (await reqApi.disbursed(r.id, line.lineId, hash));
+        setRows((current) => current.map((row) => (row.id === updated.id ? updated : row)));
         setNote("Approved on Ledger, settled on Arc.");
         setReviewId(null);
         await refresh();
@@ -294,6 +309,7 @@ function ReviewModal({
   onClose: () => void;
 }) {
   const openQ = r.questions.find((q) => q.answer === undefined);
+  const canApprove = !busy && !openQ;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
@@ -389,10 +405,10 @@ function ReviewModal({
           <div className="flex gap-2">
             <button
               onClick={onApprove}
-              disabled={busy}
+              disabled={!canApprove}
               className="flex-1 rounded-lg bg-teal px-3 py-2.5 text-sm font-bold text-[#003731] hover:bg-teal-bright disabled:opacity-40"
             >
-              {busy ? "…" : "⎘ Approve on Ledger"}
+              {openQ ? "Waiting for answer" : busy ? "…" : "⎘ Approve on Ledger"}
             </button>
             <button
               onClick={onDecline}

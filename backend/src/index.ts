@@ -300,7 +300,7 @@ app.post("/credit/escalate/prepare", (req: Request, res: Response) => {
 
 app.post("/credit/escalate/submit", async (req: Request, res: Response) => {
   try {
-    const { lineId, merchant, onChainAmount, nonce, signature } = req.body ?? {};
+    const { lineId, merchant, onChainAmount, nonce, signature, requestId } = req.body ?? {};
     const hash = await arc.approveAndDisburse(
       lineId as Hex,
       merchant as Address,
@@ -308,7 +308,10 @@ app.post("/credit/escalate/submit", async (req: Request, res: Response) => {
       BigInt(nonce),
       signature as Hex,
     );
-    json(res, { ok: true, hash });
+    const request = requestId
+      ? requests.markDisbursed(String(requestId), String(lineId), hash)
+      : undefined;
+    json(res, { ok: true, hash, request: request ?? null });
   } catch (e) {
     json(res, { error: String((e as Error).message) }, 500);
   }

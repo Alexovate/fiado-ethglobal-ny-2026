@@ -102,13 +102,15 @@ export const api = {
     onChainAmount: string,
     nonce: string,
     signature: string,
+    requestId?: string,
   ) =>
-    post<{ ok: boolean; hash: `0x${string}` }>("/credit/escalate/submit", {
+    post<{ ok: boolean; hash: `0x${string}`; request: CreditRequest | null }>("/credit/escalate/submit", {
       lineId,
       merchant,
       onChainAmount,
       nonce,
       signature,
+      requestId,
     }),
 };
 

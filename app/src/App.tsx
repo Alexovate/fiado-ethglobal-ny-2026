@@ -119,8 +119,13 @@ export default function App() {
     try {
       const prep = await api.mandatePrepare();
       const session = await connectLedger();
-      const sig = await signInner(session, prep.digest);
-      await session.close();
+      let sig: `0x${string}` | null = null;
+      try {
+        sig = await signInner(session, prep.digest);
+      } finally {
+        void session.close().catch(() => undefined);
+      }
+      if (!sig) throw new Error("Ledger signature missing");
       const { hash } = await api.mandateSubmit(prep.onchain, sig);
       setMandateActive(true);
       setTx(hash);
@@ -194,8 +199,13 @@ export default function App() {
       const nonce = Math.floor(performance.now());
       const prep = await api.escalatePrepare(lineId, CHAIN.merchant, String(ESCALATE.amount), nonce);
       const session = await connectLedger();
-      const sig = await signInner(session, prep.digest);
-      await session.close();
+      let sig: `0x${string}` | null = null;
+      try {
+        sig = await signInner(session, prep.digest);
+      } finally {
+        void session.close().catch(() => undefined);
+      }
+      if (!sig) throw new Error("Ledger signature missing");
       const { hash } = await api.escalateSubmit(lineId, CHAIN.merchant, prep.onChainAmount, prep.nonce, sig);
       setLedgerApproved(true);
       setTx(hash);
