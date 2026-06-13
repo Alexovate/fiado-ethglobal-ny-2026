@@ -23,6 +23,8 @@ export default function OperatorDashboard() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [asking, setAsking] = useState<Record<string, string>>({});
+  const [reviewId, setReviewId] = useState<string | null>(null);
+  const [borrower, setBorrower] = useState<{ reputationTier: string; outstandingDisplay: string } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const refresh = useCallback(async () => {
@@ -47,6 +49,7 @@ export default function OperatorDashboard() {
       setBusyId(r.id);
       try {
         await reqApi.decide(r.id, "decline");
+        setReviewId(null);
         await refresh();
       } finally {
         setBusyId(null);
@@ -87,6 +90,7 @@ export default function OperatorDashboard() {
         await api.escalateSubmit(line.lineId, r.merchant, prep.onChainAmount, prep.nonce, sig);
         await reqApi.decide(r.id, "approve");
         setNote("Approved on Ledger, settled on Arc.");
+        setReviewId(null);
         await refresh();
       } catch (e) {
         setNote(`Ledger approval failed: ${(e as Error).message}`);
@@ -114,8 +118,21 @@ export default function OperatorDashboard() {
     [refresh],
   );
 
+  const openReview = useCallback(async (r: CreditRequest) => {
+    setReviewId(r.id);
+    setBorrower(null);
+    try {
+      const s = await api.customerStatus(r.nullifierHash);
+      setBorrower({ reputationTier: s.reputationTier, outstandingDisplay: s.outstandingDisplay });
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const pending = rows.filter((r) => r.status === "escalated").length;
   const granted = (st: string) => st === "auto_approved" || st === "approved" || st === "disbursed";
+  // Live view of the request being reviewed (stays in sync with polling).
+  const review = reviewId ? (rows.find((r) => r.id === reviewId) ?? null) : null;
 
   return (
     <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-4 px-6 py-6">
@@ -222,45 +239,170 @@ export default function OperatorDashboard() {
                 </div>
               )}
 
-              {/* operator actions for escalated requests */}
+              {/* escalated -> open the focused review */}
               {r.status === "escalated" && (
-                <div className="mt-3 flex flex-col gap-2 border-t border-border/60 pt-3">
-                  <div className="flex gap-2">
-                    <input
-                      value={asking[r.id] ?? ""}
-                      onChange={(e) => setAsking((a) => ({ ...a, [r.id]: e.target.value }))}
-                      placeholder="Ask the borrower a question…"
-                      className="flex-1 rounded-lg border border-border bg-surface-2 px-3 py-2 text-xs outline-none focus:border-teal"
-                    />
-                    <button
-                      onClick={() => ask(r)}
-                      disabled={busyId === r.id}
-                      className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-ink disabled:opacity-40"
-                    >
-                      Ask
-                    </button>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => approveOnLedger(r)}
-                      disabled={busyId === r.id}
-                      className="flex-1 rounded-lg bg-teal px-3 py-2 text-xs font-bold text-[#003731] hover:bg-teal-bright disabled:opacity-40"
-                    >
-                      ⎘ Approve on Ledger
-                    </button>
-                    <button
-                      onClick={() => decline(r)}
-                      disabled={busyId === r.id}
-                      className="rounded-lg border border-red/40 px-3 py-2 text-xs font-medium text-red hover:bg-red/10 disabled:opacity-40"
-                    >
-                      Decline
-                    </button>
-                  </div>
+                <div className="mt-3 border-t border-border/60 pt-3">
+                  <button
+                    onClick={() => openReview(r)}
+                    className="rounded-lg border border-amber/50 bg-amber-dim px-3 py-2 text-xs font-bold text-amber-bright hover:border-amber"
+                  >
+                    Review &amp; decide →
+                  </button>
                 </div>
               )}
             </div>
           );
         })}
+      </div>
+
+      {review && (
+        <ReviewModal
+          r={review}
+          borrower={borrower}
+          busy={busyId === review.id}
+          askText={asking[review.id] ?? ""}
+          onAskText={(v) => setAsking((a) => ({ ...a, [review.id]: v }))}
+          onAsk={() => ask(review)}
+          onApprove={() => approveOnLedger(review)}
+          onDecline={() => decline(review)}
+          onClose={() => setReviewId(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ReviewModal({
+  r,
+  borrower,
+  busy,
+  askText,
+  onAskText,
+  onAsk,
+  onApprove,
+  onDecline,
+  onClose,
+}: {
+  r: CreditRequest;
+  borrower: { reputationTier: string; outstandingDisplay: string } | null;
+  busy: boolean;
+  askText: string;
+  onAskText: (v: string) => void;
+  onAsk: () => void;
+  onApprove: () => void;
+  onDecline: () => void;
+  onClose: () => void;
+}) {
+  const openQ = r.questions.find((q) => q.answer === undefined);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-amber/40 bg-surface-2 shadow-2xl">
+        <div className="flex items-start justify-between border-b border-border p-5">
+          <div>
+            <div className="flex items-center gap-2 text-amber-bright">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md border border-amber/50 bg-amber-dim text-[11px] font-bold">
+                !
+              </span>
+              <span className="text-xs font-semibold uppercase tracking-wider">Human review</span>
+            </div>
+            <div className="mt-2 text-2xl font-extrabold tracking-tight">
+              {usdc(r.amountDisplay, false)} <span className="text-base text-muted">USDC</span>
+            </div>
+            <div className="text-xs text-muted">
+              {r.purpose ? `"${r.purpose}"` : "(no purpose given)"} · {r.nullifierHash.slice(0, 12)}…
+            </div>
+          </div>
+          <button onClick={onClose} className="text-faint hover:text-ink">
+            ✕
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 p-5">
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Why this needs you</div>
+            {r.reasonCodes[0] && <p className="mt-1 text-sm text-ink/90">{r.reasonCodes[0]}</p>}
+            {r.escalationReasons.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {r.escalationReasons.map((c) => (
+                  <span key={c} className="rounded-full bg-amber-dim px-2 py-0.5 text-[10px] text-amber-bright">
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {r.agentReasoning && (
+            <div className="rounded-xl border border-teal/25 bg-teal-dim/30 p-3">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-teal">
+                Agent assessment · confidence {pct(r.confidence)}
+              </div>
+              <p className="mt-1 text-sm text-ink/90">{r.agentReasoning}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider text-faint">Borrower</div>
+              <div className="text-sm font-semibold text-teal">{borrower?.reputationTier ?? "…"}</div>
+            </div>
+            <div className="rounded-lg border border-border bg-surface px-3 py-2">
+              <div className="text-[10px] uppercase tracking-wider text-faint">Currently owed</div>
+              <div className="text-sm font-semibold">{borrower ? usdc(Number(borrower.outstandingDisplay)) : "…"}</div>
+            </div>
+          </div>
+
+          {r.questions.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-faint">Conversation</div>
+              {r.questions.map((q) => (
+                <div key={q.id} className="text-xs">
+                  <span className="text-faint">{q.askedBy === "agent" ? "🤖 agent" : "you"}:</span> {q.text}
+                  {q.answer ? (
+                    <div className="ml-3 text-ink/90">↳ {q.answer}</div>
+                  ) : (
+                    <div className="ml-3 text-faint italic">awaiting borrower…</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ask the borrower another question */}
+          <div className="flex gap-2">
+            <input
+              value={askText}
+              onChange={(e) => onAskText(e.target.value)}
+              placeholder="Ask the borrower a question…"
+              className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs outline-none focus:border-teal"
+            />
+            <button
+              onClick={onAsk}
+              disabled={busy || !askText.trim() || Boolean(openQ)}
+              className="rounded-lg border border-border px-3 py-2 text-xs text-muted hover:text-ink disabled:opacity-40"
+            >
+              Ask
+            </button>
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={onApprove}
+              disabled={busy}
+              className="flex-1 rounded-lg bg-teal px-3 py-2.5 text-sm font-bold text-[#003731] hover:bg-teal-bright disabled:opacity-40"
+            >
+              {busy ? "…" : "⎘ Approve on Ledger"}
+            </button>
+            <button
+              onClick={onDecline}
+              disabled={busy}
+              className="rounded-lg border border-red/40 px-3 py-2.5 text-sm font-medium text-red hover:bg-red/10 disabled:opacity-40"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
