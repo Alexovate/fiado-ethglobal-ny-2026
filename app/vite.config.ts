@@ -12,4 +12,9 @@ export default defineConfig({
     allowedHosts: [".ngrok-free.app", ".ngrok.app", ".ngrok.io"],
     proxy: { "/api": { target: "http://localhost:3001", rewrite: (p) => p.replace(/^\/api/, "") } },
   },
+  preview: {
+    port: 4173,
+    allowedHosts: [".ngrok-free.app", ".ngrok.app", ".ngrok.io"],
+    proxy: { "/api": { target: "http://localhost:3001", rewrite: (p) => p.replace(/^\/api/, "") } },
+  },
 });
