@@ -18,6 +18,15 @@ export const config = {
   // Signing — backend authorizes openLine; the ledger key is on the device.
   backendSignerPrivateKey: env("BACKEND_SIGNER_PRIVATE_KEY"),
   creditLineAddress: env("CREDITLINE_ADDRESS"),
+  ledgerSigner: env("LEDGER_SIGNER"),
+  agentPrivateKey: env("AGENT_PRIVATE_KEY"),
+
+  // Arc
+  arcRpcUrl: env("ARC_RPC_URL", "https://rpc.testnet.arc.network"),
+  usdcAddress: env("USDC_ADDRESS", "0x3600000000000000000000000000000000000000"),
+
+  // Demo scaling: on-chain settlement = display amount / scaleDivisor (1 = real 1:1).
+  scaleDivisor: BigInt(env("DEMO_SCALE_DIVISOR", "1")),
 
   // Policy
   confidenceThreshold: Number(env("POLICY_CONFIDENCE_THRESHOLD", "0.85")),
