@@ -123,6 +123,8 @@ export interface CreditRequest {
   reasonCodes: string[];
   escalationReasons: string[];
   questions: Question[];
+  agentReasoning?: string;
+  decidedBy?: "rule" | "agent";
   lineId?: string;
   tx?: string;
 }

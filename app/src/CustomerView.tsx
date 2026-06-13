@@ -330,6 +330,7 @@ export default function CustomerView() {
           body={`${usdc(req.amountDisplay)} store credit at Doña Rosa. The merchant is paid directly — you pay it back later.`}
           confidence={req.confidence}
           tx={tx}
+          reasoning={req.decidedBy === "agent" ? req.agentReasoning : undefined}
         />
       )}
       {req && !openQ && req.status === "approved" && (
@@ -373,18 +374,25 @@ function Outcome({
   body,
   confidence,
   tx,
+  reasoning,
 }: {
   tone: "teal" | "amber";
   title: string;
   body: string;
   confidence: number;
   tx?: string | null;
+  reasoning?: string;
 }) {
   const c = tone === "teal" ? "border-teal/40 bg-teal-dim/40 text-teal" : "border-amber/40 bg-amber-dim/40 text-amber-bright";
   return (
     <div className={`flex flex-col gap-2 rounded-2xl border p-5 ${c}`}>
       <div className="text-lg font-extrabold tracking-tight">{title}</div>
       <p className="text-sm text-ink/90">{body}</p>
+      {reasoning && (
+        <p className="rounded-lg border border-border/60 bg-surface/60 px-3 py-2 text-xs text-muted">
+          <span className="font-semibold text-ink/80">AI agent:</span> {reasoning}
+        </p>
+      )}
       <div className="text-[11px] text-muted">agent confidence {pct(confidence)}</div>
       {tx && (
         <a href={`${EXPLORER}/tx/${tx}`} target="_blank" rel="noreferrer" className="font-mono text-xs text-teal hover:text-teal-bright">

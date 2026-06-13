@@ -35,6 +35,8 @@ export const config = {
   velocityMaxInWindow: Number(env("POLICY_VELOCITY_MAX", "5")),
   // Above this amount the agent asks the borrower a clarifying question first.
   questionThresholdDisplay: BigInt(env("POLICY_QUESTION_THRESHOLD", "50")) * 1_000_000n,
+  // At/under this amount, credit is auto-granted (no agent reasoning needed).
+  autoGrantThresholdDisplay: BigInt(env("POLICY_AUTO_GRANT_THRESHOLD", "5")) * 1_000_000n,
 
   // Demo seed mandate (real one is signed on the Ledger; this mirrors it for quotes)
   mandate: {

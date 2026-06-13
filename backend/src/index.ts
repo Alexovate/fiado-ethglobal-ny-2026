@@ -284,7 +284,7 @@ app.post("/credit/escalate/submit", async (req: Request, res: Response) => {
 
 // --- Conversational underwriting: the credit-request state machine ---
 
-app.post("/request", (req: Request, res: Response) => {
+app.post("/request", async (req: Request, res: Response) => {
   const { nullifierHash, merchant, amountDisplay, purpose } = req.body ?? {};
   if (!nullifierHash || !merchant || amountDisplay === undefined) {
     return json(res, { error: "nullifierHash, merchant, amountDisplay required" }, 400);
@@ -292,12 +292,13 @@ app.post("/request", (req: Request, res: Response) => {
   if (!getHuman(nullifierHash)) {
     return json(res, { error: "human not verified — complete World ID first" }, 403);
   }
-  json(res, requests.create({
+  const r = await requests.create({
     nullifierHash,
     merchant,
     amountDisplay: Number(amountDisplay),
     purpose: purpose ?? "",
-  }));
+  });
+  json(res, r);
 });
 
 app.get("/request/:id", (req: Request, res: Response) => {
@@ -306,10 +307,10 @@ app.get("/request/:id", (req: Request, res: Response) => {
   json(res, r);
 });
 
-app.post("/request/:id/answer", (req: Request, res: Response) => {
+app.post("/request/:id/answer", async (req: Request, res: Response) => {
   const { questionId, answer } = req.body ?? {};
   if (!questionId) return json(res, { error: "questionId required" }, 400);
-  const r = requests.answer(String(req.params.id), String(questionId), String(answer ?? ""));
+  const r = await requests.answer(String(req.params.id), String(questionId), String(answer ?? ""));
   if (!r) return json(res, { error: "not found" }, 404);
   json(res, r);
 });

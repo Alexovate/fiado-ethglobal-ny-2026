@@ -6,7 +6,8 @@
 
 import { config } from "./config.js";
 import { evaluate as policyEvaluate } from "./policy.js";
-import { getHuman } from "./store.js";
+import { getHuman, recordRequest } from "./store.js";
+import { decideCredit, type CreditContext } from "./brain.js";
 
 export type ReqStatus =
   | "need_info" // a question is open, waiting on the borrower
@@ -35,6 +36,8 @@ export interface CreditRequest {
   reasonCodes: string[];
   escalationReasons: string[];
   questions: Question[];
+  agentReasoning?: string; // the Claude agent's one-line rationale
+  decidedBy?: "rule" | "agent"; // who made the call
   lineId?: string;
   tx?: string;
   createdAt: number;
@@ -49,28 +52,8 @@ function qid(): string {
   return `q_${(++seq).toString(36)}`;
 }
 
-/** Core decision: question gate -> agent probe -> deterministic policy. */
-function evaluate(r: CreditRequest): void {
-  const open = r.questions.find((q) => q.answer === undefined);
-  if (open) {
-    r.status = "need_info";
-    r.route = "NEED_INFO";
-    return;
-  }
-
-  // Agent asks once, for amounts above the threshold, to probe fraud-vs-real.
-  const agentAsked = r.questions.some((q) => q.askedBy === "agent");
-  if (BigInt(r.amountDisplay) >= config.questionThresholdDisplay && !agentAsked) {
-    r.questions.push({
-      id: qid(),
-      text: "What are you buying right now, and when do you expect to repay?",
-      askedBy: "agent",
-    });
-    r.status = "need_info";
-    r.route = "NEED_INFO";
-    return;
-  }
-
+/** Deterministic fallback (used if the Claude brain is unavailable). */
+function deterministicDecision(r: CreditRequest): void {
   const intakeAnswered = r.questions.some((q) => q.askedBy === "agent" && !!q.answer);
   const human = getHuman(r.nullifierHash);
   const result = policyEvaluate({
@@ -86,10 +69,10 @@ function evaluate(r: CreditRequest): void {
     confidenceThreshold: config.confidenceThreshold,
     intakeAnswered,
   });
-
   r.confidence = result.confidence;
   r.reasonCodes = result.reasonCodes;
   r.escalationReasons = result.escalationReasons;
+  r.decidedBy = "rule";
   if (result.route === "AUTO") {
     r.route = "AUTO";
     r.status = "auto_approved";
@@ -99,12 +82,103 @@ function evaluate(r: CreditRequest): void {
   }
 }
 
-export function create(p: {
+/**
+ * Tiered decision:
+ *   <= auto-grant threshold   -> grant (rule)
+ *   >  per-tx cap             -> escalate to human + Ledger (rule)
+ *   in between (gray zone)    -> the Claude agent reasons: grant / ask / escalate
+ * The contract enforces the bounds, so the agent can only be stricter, never looser.
+ */
+async function evaluate(r: CreditRequest): Promise<void> {
+  const open = r.questions.find((q) => q.answer === undefined);
+  if (open) {
+    r.status = "need_info";
+    r.route = "NEED_INFO";
+    return;
+  }
+
+  const amount = BigInt(r.amountDisplay);
+  const human = getHuman(r.nullifierHash);
+
+  // TIER 1 — tiny amounts auto-granted (one active line per human is on-chain).
+  if (amount <= config.autoGrantThresholdDisplay) {
+    r.route = "AUTO";
+    r.status = "auto_approved";
+    r.confidence = 0.99;
+    r.reasonCodes = ["under auto-grant threshold — instant"];
+    r.decidedBy = "rule";
+    return;
+  }
+  // TIER 3 — over the per-tx cap always needs a human on the Ledger.
+  if (amount > config.mandate.maxPerTx) {
+    r.route = "ESCALATE";
+    r.status = "escalated";
+    r.confidence = 0.5;
+    r.escalationReasons = ["OVER_TX_CAP"];
+    r.reasonCodes = ["exceeds per-transaction cap"];
+    r.decidedBy = "rule";
+    return;
+  }
+
+  // TIER 2 — gray zone: the Claude agent decides.
+  const answered = r.questions.find((q) => q.askedBy === "agent" && q.answer);
+  const established = (human?.reputation ?? 0n) > 0n;
+  const recent =
+    (human?.requestTimestamps ?? []).filter((t) => Date.now() - t <= config.velocityWindowMs).length || 1;
+  const ctx: CreditContext = {
+    amountDisplay: r.amountDisplay,
+    purpose: r.purpose,
+    reputationTier: established ? "Established" : "New borrower",
+    tabsRepaid: established ? "8 / 8" : "0 / 0",
+    totalRepaidDisplay: Number(human?.reputation ?? 0n),
+    outstandingDisplay: 0,
+    priorMaxDisplay: established ? 45_000_000 : 0,
+    defaultRate: established ? "0%" : "n/a",
+    maxPerTxDisplay: Number(config.mandate.maxPerTx),
+    recentRequests: recent,
+    priorAnswer: answered?.answer,
+  };
+
+  const d = await decideCredit(ctx);
+  if (!d) {
+    deterministicDecision(r);
+    return;
+  }
+
+  r.confidence = d.confidence;
+  r.agentReasoning = d.reasoning;
+  r.reasonCodes = d.reasoning ? [d.reasoning] : [];
+  r.decidedBy = "agent";
+
+  if (d.decision === "grant") {
+    r.route = "AUTO";
+    r.status = "auto_approved";
+  } else if (d.decision === "decline") {
+    r.route = "ESCALATE";
+    r.status = "declined";
+  } else if (d.decision === "ask" && !answered) {
+    r.questions.push({
+      id: qid(),
+      text: d.question || "What are you buying, and when will you repay?",
+      askedBy: "agent",
+    });
+    r.status = "need_info";
+    r.route = "NEED_INFO";
+  } else {
+    // escalate (or "ask" again after already asking) -> hand to a human
+    r.route = "ESCALATE";
+    r.status = "escalated";
+    r.escalationReasons = ["AGENT_ESCALATED"];
+  }
+}
+
+export async function create(p: {
   nullifierHash: string;
   merchant: string;
   amountDisplay: number;
   purpose: string;
-}): CreditRequest {
+}): Promise<CreditRequest> {
+  recordRequest(p.nullifierHash, Date.now()); // velocity signal for the agent
   const r: CreditRequest = {
     id: rid(),
     nullifierHash: p.nullifierHash,
@@ -120,7 +194,7 @@ export function create(p: {
     createdAt: Date.now(),
   };
   requests.set(r.id, r);
-  evaluate(r);
+  await evaluate(r);
   return r;
 }
 
@@ -143,12 +217,16 @@ export function latestOpenForHuman(nullifierHash: string): CreditRequest | undef
   return found;
 }
 
-export function answer(id: string, questionId: string, text: string): CreditRequest | undefined {
+export async function answer(
+  id: string,
+  questionId: string,
+  text: string,
+): Promise<CreditRequest | undefined> {
   const r = requests.get(id);
   if (!r) return undefined;
   const q = r.questions.find((x) => x.id === questionId);
   if (q) q.answer = text;
-  evaluate(r);
+  await evaluate(r);
   return r;
 }
 
