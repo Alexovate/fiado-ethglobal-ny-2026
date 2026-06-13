@@ -62,15 +62,20 @@ Customer / Demo UI
 
 ## What is real vs mocked
 
-- **Real:** `CreditLine` deployed on Arc; merchant registration, credit-line
-  opening with backend signature, and the USDC pool all verified on-chain;
-  contract-enforced mandate bounds + escalation gate; deterministic policy engine.
-- **Real (pending device):** mandate signing and escalation approval use the
-  physical Ledger — wired via WebHID.
+- **Real, proven on-chain (device test passed):** `CreditLine` on Arc; merchant
+  registration and the USDC pool; the agent mandate **signed on a physical
+  Ledger** (`setAgentMandate`); the **AUTO** path (`openLine` + `autoDisburse`,
+  no human) and the **ESCALATE** path (`openLine` + Ledger-confirmed
+  `approveAndDisburse`). Merchant balance moved 0 → 1518 on-chain across both.
+- **Real moat:** a credit line cannot be opened for a nullifier that has not
+  passed World ID `/verify` — enforced server-side (`/credit/open` returns 403).
 - **Scaled for demo:** on-chain settlement = displayed amount ÷ `DEMO_SCALE_DIVISOR`
   so a single testnet faucet covers the demo. The mechanism is identical at 1:1.
-- **Mocked until wired:** World ID proof can run through `DEMO_MOCK_MODE` as a
-  rehearsal fallback; the live path verifies real World ID proofs.
+- **Mocked / fallback:** the World ID **proof itself** runs through
+  `DEMO_MOCK_MODE` (the verify-gate is real and enforced; wiring IDKit 4.0 to
+  carry a live proof is the remaining World integration). Ledger uses
+  `personal_sign` — the device shows a signing request, not a Clear-Signed
+  (ERC-7730) decoded amount. See [docs/known-limitations.md](docs/known-limitations.md).
 
 ## Setup
 
